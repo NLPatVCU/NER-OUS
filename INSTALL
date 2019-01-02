@@ -1,0 +1,22 @@
+"""
+INSTALL
+Task 11 System
+Authors: Jeffrey Smith, Bill Cramer, Evan French
+"""
+
+The main functionality of the program relies on Python and Perl with specific submodules. It also requires annotated training data and a vector embedding model.
+
+INSTALL STEPS
+
+1) Install Python 3.6.X
+2) Use pip to install the following dependencies or compile and install manually:
+	tensorflow
+	numpy
+	bs4
+	pandas
+	shlex
+	shutil
+3) Install Perl 5.26.X or later
+4) Use cpan/cpanm to install the following dependencies or compile and install manually:
+	Word2vec::Interface
+5) Edit the config.ini file to your specifications.

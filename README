@@ -1,0 +1,32 @@
+"""
+README
+Task 11 System
+Authors: Jeffrey Smith, Bill Cramer, Evan French
+"""
+
+INTRODUCTION
+
+The scope of the Task 11 system is to provide an end to end NLP pipeline for the recognition of named entities in Biomedical text. It utilizes labeled training data to train a Bidirectional LSTM-CRF model. The system will be able to save and load the model as needed for future reproducibility and evaulation.
+
+Named  Entity  Recognition  (NER)  is  a  subtask within the Information Extraction (IE) branch of Natural Language Processing (NLP). Given a corpus, an NER system identifies groups of concepts. Historically, NER systems were programmed using hand-crafted rule based algorithms. Now, machine learning techniques have their place thanks to modern computing hardware offering a high degree of computational efficiency.
+
+Public,  open  source  general  NER  systems  offer  a  high  degree  of  precision  and  accuracy  for non-specific  recognition  tasks. These  systems fall short, however, when attempting to analyze domain specific categories.  As a result, NER systems have to be custom tailored to the domain and ontology they are meant to represent. One  such  domain  is  the biomedical domain, which  contains  data,  relations,  and  concepts  associated  with  biology  and  medicine  as  it  relates to human systems.
+
+As an example, in the sentence, "Significant for hypertension, hyperlipidemia.", hyperlipidemia and hypertension can be classified under the category symptoms.
+
+AUTHORS
+
+Jeffrey Smith - Developed the neural network training and evaluation portions along with some of the base classes for sentence structures. Also setup the system to convert words into vector embeddings.
+
+Bill Cramer - Developed the preprocessing functionality to parse out date and number structures as well as constructed presentations and obtained sources.
+
+Evan French - Developed the annotation parsing system that matches the text from sentences to concept annotation files.
+
+USING
+
+Run the program using the temporary command:
+	python3 ./run_test.py
+OR
+	./runit.sh
+	
+This command will be replaced in the future with the run.py file that accepts commandline arguments.
