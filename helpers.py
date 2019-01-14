@@ -47,16 +47,36 @@ treatment_list = [
 ]
 
 def stripped_filename(filename): 
+    """
+    Quickly strip extension from a filename.
+    
+    :param filename: Filename to remove extension from.
+    :return: Stripped filename.
+    """
     return os.path.splitext(filename)[0]
     
-def build_metamap_semantic_dictionary(medacy_instance, in_file):
-    metamap_dict = medacy_instance.map_file(in_file)
-    metamap_terms = medacy_instance.extract_mapped_terms(metamap_dict)
-    metamap_annotations = medacy_instance.mapped_terms_to_spacy_ann(metamap_terms)
+def build_metamap_semantic_dictionary(medacy_metamap_component, in_file_path):
+    """
+    Uses an instance of Medacy MetaMap to build a dictionary of semantic objects and map them in SpaCy ANN format.
+    
+    :param medacy_metamap_component: Initialized Medacy MetaMap component to use.
+    :param in_file_path: Path of the file to build the semantic dictionary for.
+    :return: Metamap annotation dictionary in SpaCy ANN format.
+    """
+    metamap_dict = medacy_metamap_component.map_file(in_file_path)
+    metamap_terms = medacy_metamap_component.extract_mapped_terms(metamap_dict)
+    metamap_annotations = medacy_metamap_component.mapped_terms_to_spacy_ann(metamap_terms)
     
     return metamap_annotations
 
 def build_word_dictionary(in_file):
+    """
+    Builds a dictionary of words indexed by starting position in a document. For mapping ANN annotations to CON format.
+    [start_index, text, sentence #, word #, problem st, test st, treatment st]
+    
+    :param in_file: Open file to be read and mapped.
+    :return: Dictionary of words indexed by starting position. 
+    """
     index_dict = {}
     line_index_counter = 0
     sentence_counter = 1
@@ -68,11 +88,14 @@ def build_word_dictionary(in_file):
     while line:
         #Find all locations of whitespace.
         spaces = [m.start() for m in re.finditer(' ', line)]
+        
         #If we have whitespace, process the words.
         if len(spaces):
             word_start = -1
+            
             if not spaces[0] == 0:
                 word_start = 0
+                
             for i in range(0, len(spaces)):
                 if not word_start == -1:
                     #[start_index, text, sentence #, word #, problem st, test st, treatment st]
@@ -87,6 +110,7 @@ def build_word_dictionary(in_file):
                 else:
                     if not spaces[i] == (spaces[i+1] - 1):
                         word_start = spaces[i] + 1
+ 
         #No whitespace, so if there is text, just add it as a word.
         else:
             if len(line):
@@ -101,9 +125,75 @@ def build_word_dictionary(in_file):
         
     return index_dict
 
+def write_semantic_annotations_to_file(index_dict, out_file_path):
+    """
+    Writes semantic annotations to file for easy retrieval. CSV format. Indicies below.
+    sentence #, word #, problem st, test st, treatment st
+    
+    :param index_dict: Processed dictionary of words and annotations to write to file.
+    :param out_file_path: Path to write to.
+    :return: None
+    """
+    out_file = open(out_file_path, 'w')
+    for v in index_dict.values():
+        if v[4] or v[5] or v[6]:
+            out_buff = [str(v[2]), str(v[3]), str(v[4]), str(v[5]), str(v[6])] 
+            out_file.write(','.join(out_buff) + '\n')
+    out_file.close()
 
+def build_single_semantic_type_annotations(config, in_file_path, medacy_metamap_component=None):
+    """
+    Builds a dictionary of words indexed by starting position in a document and adds metamap annotations. 
+    This function does not write to file.
+    [start_index, text, sentence #, word #, problem st, test st, treatment st]
+    
+    :param config: Configuration file to utilize. 
+    :param in_file_path: Path to file to be read and mapped.
+    :param medacy_metamap_component: Optinal open instance of a Medacy MetaMap component. If not provided, will open one.
+    :return: Dictionary of words indexed by starting position in a document and metamap annotations. 
+    """
+    if not medacy_metamap_component:
+        medacy_metamap_component = MetaMap(metamap_path=config['METAMAP_PATH'])
+    metamap_annotations = build_metamap_semantic_dictionary(medacy_metamap_component, in_file_path)
+
+    in_file = open(in_file_path, 'r')
+    index_dict = build_word_dictionary(in_file)
+    in_file.close()
+    
+    #Sort the index_dict for easy traversal.
+    key_list = sorted(index_dict.keys())
+
+    for v in metamap_annotations["entities"].values():
+        mark_location = -1
+        if v[2] in problem_list:
+            mark_location = 4
+        elif v[2] in test_list:
+            mark_location = 5
+        elif v[2] in treatment_list:
+            mark_location = 6
+
+        if mark_location > -1:
+            try:
+                start_index = key_list.index(v[0])
+                while key_list[start_index] < v[1]:
+                    index_dict[key_list[start_index]][mark_location] = 1
+                    start_index += 1
+                    if start_index >= len(key_list):
+                        break
+            except ValueError:
+                print("Found a non-existant index. Continuing.")
+    return index_dict
+    
+    
 def build_semantic_type_annotations(config):
-    #TODO(Jeff): Fill out function information.
+    """
+    For a directory, builds a dictionary of words indexed by starting position in a document and adds metamap annotations then converts and writes to file. 
+    CSV format. Indicies below.
+    sentence #, word #, problem st, test st, treatment st
+    
+    :param config: Configuration file to utilize. 
+    :return: None
+    """
     medacy_metamap_component = MetaMap(metamap_path=config['METAMAP_PATH'])
     input_directory = config['RAW_FILE_PATH']
     output_directory = config['SEMANTIC_ANNOTATION_FILE_PATH']
@@ -116,41 +206,8 @@ def build_semantic_type_annotations(config):
     for document in os.listdir():
         out_file_path = os.path.join(cwd, output_directory, stripped_filename(document) + ".st")
         if not os.path.exists(out_file_path) or config['OVERRIDE_SEMANTIC_ANNOTATIONS'] == "1":
-            metamap_annotations = build_metamap_semantic_dictionary(medacy_metamap_component, document)
-            
-            in_file = open(document, 'r')
-            index_dict = build_word_dictionary(in_file)
-            in_file.close()
-            
-            #Sort the index_dict for easy traversal.
-            key_list = sorted(index_dict.keys())
-            
-            for v in metamap_annotations["entities"].values():
-                mark_location = -1
-                if v[2] in problem_list:
-                    mark_location = 4
-                elif v[2] in test_list:
-                    mark_location = 5
-                elif v[2] in treatment_list:
-                    mark_location = 6
-
-                if mark_location > -1:
-                    try:
-                        start_index = key_list.index(v[0])
-                        while key_list[start_index] < v[1]:
-                            index_dict[key_list[start_index]][mark_location] = 1
-                            start_index += 1
-                            if start_index >= len(key_list):
-                                break
-                    except ValueError:
-                        print("Found a non-existant index. Continuing.")
-                            
-            out_file = open(out_file_path, 'w')
-            for v in index_dict.values():
-                if v[4] or v[5] or v[6]:
-                    out_buff = [str(v[2]), str(v[3]), str(v[4]), str(v[5]), str(v[6])] 
-                    out_file.write(','.join(out_buff) + '\n')
-            out_file.close()
+            index_dict = build_single_semantic_type_annotations(config, document, medacy_metamap_component)
+            write_semantic_annotations_to_file(index_dict, out_file_path)
 
     #Return to original path
     os.chdir(cwd)
