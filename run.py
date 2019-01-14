@@ -8,7 +8,8 @@ from random import sample
 
 import numpy as np
 
-import agent, helpers
+import agent
+import helpers
 from classes import SentenceStructure, Annotation, BatchContainer
 from preprocess import preprocess
 
