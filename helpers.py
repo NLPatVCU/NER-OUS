@@ -1,4 +1,5 @@
-import os, re
+import os
+import re
 from copy import copy
 
 from medacy.pipeline_components.metamap.metamap import MetaMap
