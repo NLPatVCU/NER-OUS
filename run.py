@@ -110,7 +110,10 @@ def main():
                    "PUNC_COMMA" : 1,
                    "PUNC_PERIOD" : 2,
                    "IS_NUM" : 3,
-                   "IS_DATE" : 4}
+                   "IS_DATE" : 4,
+                   "PROBLEM_ST" : 5,
+                   "TEST_ST" : 6,
+                   "TREATMENT_ST" : 7}
                                    
     config['FEATURE_MAP'] = feature_map
     config['CLASS_LIST'] = config['CONFIGURATION']['CLASSES'].split(',')
@@ -367,11 +370,12 @@ def generate_embeddings(file_sentence_dict, config):
         for k_ in k:
             #TODO(Jeff) Add a debug flag for verbose outputs like this.
             print(k_)
+            embedding_list_file = []
             f = open('./_arff/' + k_, 'w+')
             sentence_counter = 0
 
-            #TODO(Jeff) Change this later, only static for the interm. Should match number of features.
-            f.write("201\n")
+            #Number of features
+            f.write(str(config['NUM_FEATURES']) + '\n')
 
             #x: list of sentences
             for x in file_sentence_dict[k_]:
@@ -431,9 +435,11 @@ def generate_embeddings(file_sentence_dict, config):
                         t_array[z][int(config['CONFIGURATION']['EMBEDDING_SIZE']) + config['FEATURE_MAP']["IS_NUM"]] = 1.0
                     elif x.modified_sentence_array[z][0] == "date":
                         t_array[z][int(config['CONFIGURATION']['EMBEDDING_SIZE']) + config['FEATURE_MAP']["IS_DATE"]] = 1.0
-
+                
+ 
+                
                 #Add embeddings to our arrays.
-                embedding_list.append(t_array)
+                embedding_list_file.append(t_array)
                 class_list.append(c_array)
                 seq_list.append(len(x.modified_sentence_array))
 
@@ -442,6 +448,14 @@ def generate_embeddings(file_sentence_dict, config):
                 sentence_counter += 1
 
             f.close()
+            
+            #Add Semantic Embeddings
+            sem_loc = os.path.join(config['CONFIGURATION']['SEMANTIC_ANNOTATION_FILE_PATH'], k_ + '.st')
+            add_semantic_features(config, sem_loc, embedding_list_file)
+
+            #Add Document Embeddings to List
+            embedding_list.extend(embedding_list_file)
+            
     except Exception as e:
         print("Failed to properly generate word embeddings. Dying.")
         print(repr(e))
@@ -478,6 +492,26 @@ def add_modified_sentence_array(file_sentence_dict):
     for x in v:
         for y in x:
             y.generate_modified_sentence_array()
+            
+def add_semantic_features(config, semantic_annotation_file_path, feature_vector):
+    #Open File
+    smf = open(semantic_annotation_file_path, 'r')
+    smf_line = smf.readline()
+    
+    #Parse Lines
+    while smf_line:
+        smf_line_split = smf_line.split(',')
+        smf_line_split = [int(i) for i in smf_line_split]
+        smf_sentence = smf_line_split[0]-1
+        smf_word = smf_line_split[1]
+        
+        if len(smf_line_split) == 5:
+            smf_line_split = [int(i) for i in smf_line_split]
+            smf_index = config['FEATURE_MAP']['PROBLEM_ST']
+            feature_vector[smf_sentence][smf_word][smf_index:smf_index+3] = smf_line_split[2:]
+        else:
+            print("Invalid line found in semantic annotation file. Continuing.")
+        smf_line = smf.readline()
 
 def create_sentence_structures(raw_file_path):
     """

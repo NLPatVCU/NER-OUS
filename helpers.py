@@ -154,7 +154,7 @@ def build_single_semantic_type_annotations(config, in_file_path, medacy_metamap_
     :return: Dictionary of words indexed by starting position in a document and metamap annotations. 
     """
     if not medacy_metamap_component:
-        medacy_metamap_component = MetaMap(metamap_path=config['METAMAP_PATH'])
+        medacy_metamap_component = MetaMap(metamap_path=config['CONFIGURATION']['METAMAP_PATH'])
     metamap_annotations = build_metamap_semantic_dictionary(medacy_metamap_component, in_file_path)
 
     in_file = open(in_file_path, 'r')
@@ -195,9 +195,9 @@ def build_semantic_type_annotations(config):
     :param config: Configuration file to utilize. 
     :return: None
     """
-    medacy_metamap_component = MetaMap(metamap_path=config['METAMAP_PATH'])
-    input_directory = config['RAW_FILE_PATH']
-    output_directory = config['SEMANTIC_ANNOTATION_FILE_PATH']
+    medacy_metamap_component = MetaMap(metamap_path=config['CONFIGURATION']['METAMAP_PATH'])
+    input_directory = config['CONFIGURATION']['RAW_FILE_PATH']
+    output_directory = config['CONFIGURATION']['SEMANTIC_ANNOTATION_FILE_PATH']
 
     # cd into test file directory
     cwd = os.getcwd()
@@ -206,7 +206,7 @@ def build_semantic_type_annotations(config):
     #Iterate over documents in the raw_file_path directory
     for document in os.listdir():
         out_file_path = os.path.join(cwd, output_directory, stripped_filename(document) + ".st")
-        if not os.path.exists(out_file_path) or config['OVERRIDE_SEMANTIC_ANNOTATIONS'] == "1":
+        if not os.path.exists(out_file_path) or config['CONFIGURATION']['OVERRIDE_SEMANTIC_ANNOTATIONS'] == "1":
             index_dict = build_single_semantic_type_annotations(config, document, medacy_metamap_component)
             write_semantic_annotations_to_file(index_dict, out_file_path)
 

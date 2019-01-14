@@ -1,0 +1,125 @@
+917
+3986
+Found a non-existant index. Continuing.
+Found a non-existant index. Continuing.
+Found a non-existant index. Continuing.
+Found a non-existant index. Continuing.
+Found a non-existant index. Continuing.
+Found a non-existant index. Continuing.
+Found a non-existant index. Continuing.
+Found a non-existant index. Continuing.
+3040
+4902
+Found a non-existant index. Continuing.
+Found a non-existant index. Continuing.
+Found a non-existant index. Continuing.
+225
+Found a non-existant index. Continuing.
+1305
+764
+869
+1764
+1192
+1830
+310
+1249
+1840
+379
+1071
+313
+3194
+264
+1680
+663
+1753
+330
+261
+1102
+2336
+1402
+Found a non-existant index. Continuing.
+Found a non-existant index. Continuing.
+Found a non-existant index. Continuing.
+1721
+306
+1101
+850
+2144
+284
+322
+1862
+Found a non-existant index. Continuing.
+451
+Found a non-existant index. Continuing.
+157
+299
+301
+374
+2011
+2482
+3711
+2122
+1104
+2283
+2003
+282
+825
+1387
+317
+937
+444
+2620
+1421
+1857
+378
+359
+794
+1151
+125
+889
+296
+328
+283
+1826
+Found a non-existant index. Continuing.
+1738
+1041
+351
+1019
+274
+3214
+1492
+Found a non-existant index. Continuing.
+Found a non-existant index. Continuing.
+Found a non-existant index. Continuing.
+177
+378
+462
+746
+2555
+Found a non-existant index. Continuing.
+Found a non-existant index. Continuing.
+354
+535
+236
+901
+1235
+1750
+345
+2236
+4878
+Found a non-existant index. Continuing.
+1976
+339
+Found a non-existant index. Continuing.
+Found a non-existant index. Continuing.
+Found a non-existant index. Continuing.
+2663
+312
+1281
+1273
+1285
+321
+2019-01-14 14:54:33.925228: I tensorflow/core/common_runtime/process_util.cc:69] Creating new thread pool with default inter op setting: 2. Tune using inter_op_parallelism_threads for best performance.
+2019-01-14 14:54:33.945969: I tensorflow/core/grappler/optimizers/meta_optimizer.cc:344] Starting optimization for grappler item: tf_graph
+2019-01-14 14:54:34.098128: I tensorflow/core/grappler/optimizers/meta_optimizer.cc:344] Starting optimization for grappler item: tf_graph
