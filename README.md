@@ -5,7 +5,7 @@ NER-OUS is a Biomedical NER system utilizing a Bidirectional LSTM-CRF model. It 
 
 ## Installation
 1. Install Perl 5.26.X or later
-2. Use cpan or cpanm it install Word2vec::Interface
+2. Use cpan or cpanm to install Word2vec::Interface
 3. Run: `pip install git+https://github.com/NanoNLP/NER-OUS`
  
 ## Contributors
