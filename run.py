@@ -274,13 +274,13 @@ def train_network(train_batch_container, file_sentence_dict, config, supplementa
     file.write("=Sentence Level=\n")
     file.write("CLASS \tSTRICT \tLENIENT \tMISS \tS% \tL%\n")
     for i in range(0, class_count):
-        file.write(str(config['CLASS_LIST']) +
+        file.write(str(config['CLASS_LIST'][i]) +
                    " \t" + str(total_sentence_lenience[i, 0]) + " \t" + str(total_sentence_lenience[i, 1]) + " \t" + str(total_sentence_lenience[i, 2]) +
                    str(total_sentence_lenience[i, 0]/np.sum(total_sentence_lenience[i, :])) + "\t" + str(np.sum(total_sentence_lenience[i, 0:2])/np.sum(total_sentence_lenience[i, :])) + "\n")
     file.write("\n")
 
     for i in range(0, class_count):
-        file.write("=" + str(config['CLASS_LIST']) + "=\n")
+        file.write("=" + str(config['CLASS_LIST'][i]) + "=\n")
         file.write("Micro Precision Average: \t" + str(np.sum(precision_micro_list[i, :])/buckets) + "\n")
         file.write("Micro Recall Average: \t" + str(np.sum(recall_micro_list[i, :])/buckets) + "\n")
         file.write("Micro F1 Average: \t" + str(np.sum(f1_micro_list[i, :])/buckets) + "\n")
