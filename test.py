@@ -8,20 +8,65 @@ import unittest
 import os
 
 import classes
-import run_test
+import run
+import agent
+
+class AgentTestClass(unittest.TestCase):
+    def test_is_overlapped(self):
+        self.assertEqual(agent.is_overlapped(2, 4, 5, 8), 1) #Right Far
+        self.assertEqual(agent.is_overlapped(0, 4, 4, 8), 0) #Right Edge
+        self.assertEqual(agent.is_overlapped(1, 4, 1, 8), 0) #Right Partial Consume
+        self.assertEqual(agent.is_overlapped(1, 4, 0, 8), 0) #Right Consume
+        self.assertEqual(agent.is_overlapped(1, 4, 2, 6), 0) #Right Normal Overlap
+        self.assertEqual(agent.is_overlapped(5, 8, 2, 4), -1) #Left Far
+        self.assertEqual(agent.is_overlapped(4, 8, 0, 4), 0) #Left Edge
+        self.assertEqual(agent.is_overlapped(4, 8, 1, 8), 0) #Left partial Consume
+        self.assertEqual(agent.is_overlapped(4, 8, 1, 9), 0) #Left Consume
+        self.assertEqual(agent.is_overlapped(4, 8, 1, 6), 0) #Left Normal Overlap
+        self.assertEqual(agent.is_overlapped(2, 10, 3, 9), 0) #Internal overlap
+        self.assertEqual(agent.is_overlapped(0, 1, 1, 1), 0) #Bug Test
+        self.assertEqual(agent.is_overlapped(0, 2, 2, 2), 0) #Bug Test
+        
+    def test_get_annotation(self):
+        x = classes.SentenceStructure("The blood pressure was 150/86 ; pulse 82 ; respirations 16 .")
+        x.original_sentence_array[0][1] = 'test'
+        x.original_sentence_array[1][1] = 'test'
+        x.original_sentence_array[2][1] = 'test'
+        x.original_sentence_array[6][1] = 'test'
+        x.original_sentence_array[9][1] = 'test'
+        
+        x1, x2, x3 = agent.get_annotation(x.original_sentence_array, 0)
+        self.assertEqual(x1, 0)
+        self.assertEqual(x2, 2)
+        self.assertEqual(x3, 'test')
+        
+        x1, x2, x3 = agent.get_annotation(x.original_sentence_array, x2+1)
+        self.assertEqual(x1, 6)
+        self.assertEqual(x2, 6)
+        self.assertEqual(x3, 'test')       
+
+        x1, x2, x3 = agent.get_annotation(x.original_sentence_array, x2+1)
+        self.assertEqual(x1, 9)
+        self.assertEqual(x2, 9)
+        self.assertEqual(x3, 'test')         
+
+        x1, x2, x3 = agent.get_annotation(x.original_sentence_array, x2+1)
+        self.assertEqual(x1, None)
+        self.assertEqual(x2, None)
+        self.assertEqual(x3, None)            
+ 
 
 #Author: Jeffrey Smith
 class ClassesTestClass(unittest.TestCase):
     def test_SentenceStructure_init_test(self):
         x = classes.SentenceStructure("I am a test string")
         self.assertEqual(x.original_sentence, "I am a test string")
-        self.assertEqual(len(x.original_sentence_array), 6)
+        self.assertEqual(len(x.original_sentence_array), 5)
         self.assertEqual(x.original_sentence_array[0][0], "I")
         self.assertEqual(x.original_sentence_array[1][0], "am")
         self.assertEqual(x.original_sentence_array[2][0], "a")
         self.assertEqual(x.original_sentence_array[3][0], "test")
         self.assertEqual(x.original_sentence_array[4][0], "string")
-        self.assertEqual(x.original_sentence_array[5][0], "END")
 
 #Author: Evan French
 class AnnotationTestClass(unittest.TestCase):
@@ -60,7 +105,7 @@ class CreateAnnotationDictionary(unittest.TestCase):
         f.write('c="cad/chf" 111:1 111:1||t="problem"')
         f.close()
 
-        result = run_test.create_annotation_dictionary('.')
+        result = run.create_annotation_dictionary('.')
         result_1 = result['test_doc_1']
         ann_1 = result_1[0]
 
@@ -101,7 +146,7 @@ class TestSentenceStructures(unittest.TestCase):
         f.write("test")
         f.close()
 
-        result = run_test.create_sentence_structures('.')
+        result = run.create_sentence_structures('.')
         result_1 = result['test_doc_1']
         result_2 = result['test_doc_2']
 
@@ -109,27 +154,23 @@ class TestSentenceStructures(unittest.TestCase):
         self.assertEqual(2, len(result))
         
         self.assertEqual(result_1[0].original_sentence, "Test doc one\n")
-        self.assertEqual(len(result_1[0].original_sentence_array), 4)
+        self.assertEqual(len(result_1[0].original_sentence_array), 3)
         self.assertEqual(result_1[0].original_sentence_array[0][0], "Test")
         self.assertEqual(result_1[0].original_sentence_array[1][0], "doc")
         self.assertEqual(result_1[0].original_sentence_array[2][0], "one")
-        self.assertEqual(result_1[0].original_sentence_array[3][0], "END")
         
         self.assertEqual(result_1[1].original_sentence, "second line")
-        self.assertEqual(len(result_1[1].original_sentence_array), 3)
+        self.assertEqual(len(result_1[1].original_sentence_array), 2)
         self.assertEqual(result_1[1].original_sentence_array[0][0], "second")
         self.assertEqual(result_1[1].original_sentence_array[1][0], "line")
-        self.assertEqual(result_1[1].original_sentence_array[2][0], "END")
-        
+
         self.assertEqual(result_2[0].original_sentence, "Small\n")
-        self.assertEqual(len(result_2[0].original_sentence_array), 2)
+        self.assertEqual(len(result_2[0].original_sentence_array), 1)
         self.assertEqual(result_2[0].original_sentence_array[0][0], "Small")
-        self.assertEqual(result_2[0].original_sentence_array[1][0], "END")
         
         self.assertEqual(result_2[1].original_sentence, "test")
-        self.assertEqual(len(result_2[1].original_sentence_array), 2)
+        self.assertEqual(len(result_2[1].original_sentence_array), 1)
         self.assertEqual(result_2[1].original_sentence_array[0][0], "test")
-        self.assertEqual(result_2[1].original_sentence_array[1][0], "END")
         
         #Cleanup
         os.remove('test_doc_1.txt')
@@ -142,12 +183,11 @@ class TestSentenceStructures(unittest.TestCase):
         an = classes.Annotation('c="his medicine" 1:2 1:3||t="treatment"')
         annotations = [an]
 
-        modified_ss = run_test.annotate_sentence_structure(ss, annotations)
+        modified_ss = run.annotate_sentence_structure(ss, annotations)
         self.assertEqual(modified_ss.original_sentence_array[0], ['Pt', ''])
         self.assertEqual(modified_ss.original_sentence_array[1], ['took', ''])
-        self.assertEqual(modified_ss.original_sentence_array[2], ['his', 'treatment:Start'])
+        self.assertEqual(modified_ss.original_sentence_array[2], ['his', 'treatment'])
         self.assertEqual(modified_ss.original_sentence_array[3], ['medicine', 'treatment'])
-        self.assertEqual(modified_ss.original_sentence_array[4], ['END', 'treatment:End'])
 
     def create_annotated_sentence_structures(self):
         ann_file_path = os.getcwd() + 'unit_test_ann_docs'
@@ -186,9 +226,8 @@ class TestSentenceStructures(unittest.TestCase):
         #Tests
         self.assertEqual(modified_ss.original_sentence_array[0], ['Pt', ''])
         self.assertEqual(modified_ss.original_sentence_array[1], ['took', ''])
-        self.assertEqual(modified_ss.original_sentence_array[2], ['his', 'treatment:Start'])
+        self.assertEqual(modified_ss.original_sentence_array[2], ['his', 'treatment'])
         self.assertEqual(modified_ss.original_sentence_array[3], ['medicine', 'treatment'])
-        self.assertEqual(modified_ss.original_sentence_array[4], ['END', 'treatment:End'])
         
         #Cleanup
         os.remove(raw_file_path + '/test.txt')

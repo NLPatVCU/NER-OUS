@@ -4,8 +4,6 @@
 #Authors: Jeffrey Smith, Bill Cramer, Evan French
 ###
 
-
-#Author: Jeffrey Smith
 use strict;
 use warnings;
 use Word2vec::Interface;

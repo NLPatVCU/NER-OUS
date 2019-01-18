@@ -3,6 +3,8 @@ agent.py
 Scope: Defines the Tensorflow Neural Network code used by the module.
 Authors: Jeffrey Smith, Bill Cramer, Evan French
 """
+from copy import copy 
+
 import tensorflow as tf
 import numpy as np
 
@@ -88,18 +90,18 @@ class Agent:
         loss, _ = self.sess.run([self.loss, self.optimizer], {self.input: batch_x, self.truth: batch_y, self.seq_len: seq_len})
         return loss
 
-    def eval(self, batch_x, batch_y, seq_len):
+    def eval_token_level(self, batch_x, batch_y, seq_len):
         """
-        Function to evaluate the network.
+        Function to evaluate network at the token level for a ground truth set.
 
         :param batch_x: The data to be fed into the network.
         :param batch_y: The labels that the batch will be tested against.
         :param seq_len: The true length of each sentence in the batch.
-        :return: Numpy array representing confusion matrix.
+        :return: (NxN) confusion matrix representing confusion matrix.
         """
         pred = self.sess.run(self.prediction, {self.input: batch_x, self.seq_len: seq_len})
 
-        cfm = np.zeros((self.num_classes, self.num_classes), dtype=np.int32)
+        confusion_matrix = np.zeros((self.num_classes, self.num_classes), dtype=np.int32)
 
         for i in range(0, len(pred)):
             predi = pred[i, 0:seq_len[i], :]
@@ -108,166 +110,166 @@ class Agent:
             for j in range(0, seq_len[i]):
                 truth_class = int(batch_y[i][j])
                 pred_class = int(predi_argmax[j])
-                cfm[pred_class, truth_class] += 1
+                confusion_matrix[pred_class, truth_class] += 1
 
-        return cfm
+        return confusion_matrix
 
-    def eval_with_structure(self, batch_x, batch_y, seq_len, k, file_map, batch_map, sentence_dict):
+    def eval_phrase_level(self, batch_x, seq_len, k, file_map, batch_map, sentence_dict, config):
         """
-        Function to evaluate the network in regards to original sentence structure.
+        Function to evaluate the network at the phrase level for a ground truth set.
 
         :param batch_x: The data to be fed into the network.
-        :param batch_y: The labels that the batch will be tested against.
         :param seq_len: The true length of each sentence in the batch.
         :param k: The current bucket index.
         :param file_map: Map linking indices to files and sentences.
         :param batch_map: Map linking batches to indices for file_map.
         :param sentence_dict: Dictionary of our sentence structures.
-        :return: Numpy array representing confusion matrix.
+        :return: Numpy array representing confusion matrix.   (Nx4) matrix representing phrase level characteristics. COR/PAR/MIS/SUP
         """
-        #TODO(Jeff) Remove batch_y from function.
         pred = self.sess.run(self.prediction, {self.input: batch_x, self.seq_len: seq_len})
 
         #Matrix in the form class,true span, partial span, wrong
-        cfm = np.zeros((self.num_classes, 3), dtype=np.int32)
+        phrase_matrix = np.zeros((self.num_classes, 4), dtype=np.int32)
 
-        #TODO(Jeff) Remove Debug features or implement properly.
-        ##DEBUG FILE OUT##
-        debug_file = open("debug.txt", "a")
-
-        #For each index in k
+        #Debug
+        if "DEBUG" in config['CONFIGURATION']:
+            debug_file = open('debug.txt', 'a')
+            
+        #For each index in bucket k 
         for i in range(0, len(pred)):
-            predi = pred[i, 0:seq_len[i], :]
-            predi_argmax = np.argmax(predi, -1)
-
+            i_pred = pred[i, 0:seq_len[i], :]
+            i_pred_argmax = np.argmax(i_pred, -1)
+   
             #Get the original file_map index.
             batch_index = batch_map[k][i]
             original_index = file_map[batch_index]
             y = sentence_dict[original_index[0]][original_index[1]]
             y_ = []
 
-            #TODO(Jeff) Change this to use dynamic classes.
-            #Build the tags in the sentence
+            #Build sentence tags
             for j in range(0, seq_len[i]):
-                pred_class = int(predi_argmax[j])
-                if pred_class == 0:
-                    y_.append(None)
-                elif pred_class == 1:
-                    y_.append("problem")
-                elif pred_class == 2:
-                    y_.append("test")
-                elif pred_class == 3:
-                    y_.append("treatment")
-
-            #Add "END" for safe tagging.
-            y_.append(None)
-
-            #Append start/end tags
-            j = 0
-            #for j in range(0, len(y_)):
-            while j < len(y_):
-                if y_[j]:
-                #if not y_[j] == None and not y_[j] == "":
-                    cls = y_[j]
-
-                    y_[j] = y_[j] + ":Start"
-                    j += 1
-                    while j < len(y_):
-                        if not y_[j] == cls:
-                            if not y_[j]:
-                            #if y_[j] == "" or y_[j] == None:
-                                y_[j] = cls + ":End"
-                            else:
-                                j -= 1
-                            break
-
-                        j += 1
-                j += 1
-
-            ##DEBUG STRINGS##
-            out_text = "Text: "
-            out_tags_truth = "Truth: "
-            out_tags_pred = "Pred: "
-
-            j_ = 0
-            #for j_ in range(0, len(y_)):
-            while j_ < (len(y_)-1):
-                #if y.original_sentence_array[j_][1] == "" or y.original_sentence_array[j_][1] == None:
-                if not y.original_sentence_array[j_][1]:
-                    #if y_[j_] == "" or y_[j_] == None:
-                    if not y_[j_]:
-                        cfm[0, 0] += 1
-                    else:
-                        cfm[0, 2] += 1
-                        debug_file.write("Text: " + str(y.original_sentence_array[j_][0]) +"\n") #DEBUG
-                        debug_file.write("Truth: None\n") #DEBUG
-                        debug_file.write("Pred: " + str(y_[j_]) + "\n\n") #DEBUG
+                pred_class = int(i_pred_argmax[j])
+                if pred_class > 0:
+                    y_.append(config['CLASS_LIST'][pred_class-1].lower())
                 else:
-                    cls = ""
-                    if "problem" in y.original_sentence_array[j_][1]:
-                        cls = 1
-                    elif "test" in y.original_sentence_array[j_][1]:
-                        cls = 2
-                    elif "treatment" in y.original_sentence_array[j_][1]:
-                        cls = 3
-                    else:
-                        cls = 0
-
-                    if "Start" in y.original_sentence_array[j_][1]:
-                        #Check for same start
-                        write_flag = False #DEBUG
-                        if y_[j_] == y.original_sentence_array[j_][1]:
-                            #We have at least a partial start.
-                            full_span = True
-
-                            #Check the rest
-                            while not "End" in y.original_sentence_array[j_][1] and j_ < len(y_)-1:
-                                out_text = out_text + y.original_sentence_array[j_][0] + " " #Debug
-                                out_tags_truth = out_tags_truth + str(y.original_sentence_array[j_][1]) + " " #Debug
-                                out_tags_pred = out_tags_pred + str(y_[j_]) + " " #Debug
-                                if not y_[j_] == y.original_sentence_array[j_][1]:
-                                    full_span = False
-                                j_ += 1
-
-                            if full_span:
-                                cfm[cls, 0] += 1
-                            else:
-                                cfm[cls, 1] += 1
-                                write_flag = True
+                    y_.append('')
+                
+            #Add Tags to Modified Sentence
+            for m, el in enumerate(y.modified_sentence_array):
+                el[1] = y_[m]
+                
+            #Rebuild Modified Sentence
+            y.rebuild_modified_sentence_array()            
+            
+            #Modifiy special characters
+            m = 0
+            while m < len(y.modified_sentence_array):
+                #Check if the character in this position is a special character. If so, process
+                if y.modified_sentence_array[m][0] == ',':
+                    if m > 0 and m < len(y.modified_sentence_array)-1 and y.modified_sentence_array[m-1][1] == y.modified_sentence_array[m+1][1]:
+                        y.modified_sentence_array[m][1] = y.modified_sentence_array[m-1][1]
+                elif y.modified_sentence_array[m][0] == '/':
+                    if m > 0 and m < len(y.modified_sentence_array)-1 and y.modified_sentence_array[m-1][1] == y.modified_sentence_array[m+1][1]:
+                        y.modified_sentence_array[m][1] = y.modified_sentence_array[m-1][1]                    
+                elif y.modified_sentence_array[m][0] == '[' or y.modified_sentence_array[m][0] == '(':
+                    if m < len(y.modified_sentence_array)-1 and not y.modified_sentence_array[m+1][1] == '':
+                        y.modified_sentence_array[m][1] = y.modified_sentence_array[m+1][1]                      
+                elif y.modified_sentence_array[m][0] == ')' or y.modified_sentence_array[m][0] == ')' or y.modified_sentence_array[m] == '&apos;s':
+                    if m > 0 and not y.modified_sentence_array[m-1][1] == '':
+                        y.modified_sentence_array[m][1] = y.modified_sentence_array[m-1][1]    
+                elif y.modified_sentence_array[m][0] == '&quot;' and not y.modified_sentence_array[m][1]:
+                    quot_loc = -1
+                    for p in range(m+1, len(y.modified_sentence_array)):
+                        if y.modified_sentence_array[p][0] == '&quot;':
+                            quot_loc = p
+                            break
+                    if quot_loc > -1:
+                        y.modified_sentence_array[m][1] = y.modified_sentence_array[m+1][1]
+                        y.modified_sentence_array[quot_loc][1] = y.modified_sentence_array[m+1][1]
+                        
+                m += 1
+                
+            #Find each phrase group in original sentence and check it against predicted values.
+            truth_start, truth_end, truth_class = get_annotation(y.original_sentence_array, 0)
+            pred_start, pred_end, pred_class = get_annotation(y.modified_sentence_array, 0)
+            
+            while True:
+                if not truth_start == None and not pred_start == None:
+                    if is_overlapped(truth_start, truth_end, pred_start, pred_end) == 0:
+                        if truth_class == pred_class and truth_start == pred_start and truth_end == pred_end:
+                            #CORRECT
+                            phrase_matrix[config['CLASS_MAP'][truth_class]][0] += 1
+                            
+                            """
+                            #Debug
+                            if "DEBUG" in config['CONFIGURATION']:
+                                start_ = min(truth_start, pred_start)
+                                end_ = max(truth_end, pred_end)
+                                
+                                write_phrase_debug_line(debug_file, start_, end_, y, "COR", truth_start, truth_end, pred_start, pred_end)
+                            """
+                            
+                            truth_start, truth_end, truth_class = get_annotation(y.original_sentence_array, truth_end+1)
+                            pred_start, pred_end, pred_class = get_annotation(y.modified_sentence_array, pred_end+1)
 
                         else:
-                            cfm[cls, 2] += 1
-                            write_flag = True
-                            while not "End" in y.original_sentence_array[j_][1] and j_ < len(y_)-1:
-                                out_text = out_text + y.original_sentence_array[j_][0] + " " #Debug
-                                out_tags_truth = out_tags_truth + str(y.original_sentence_array[j_][1]) + " " #Debug
-                                out_tags_pred = out_tags_pred + str(y_[j_]) + " " #Debug
-                                j_ += 1
-
-                        if write_flag:
-                            out_text = out_text + y.original_sentence_array[j_][0] + " " #Debug
-                            out_tags_truth = out_tags_truth + str(y.original_sentence_array[j_][1]) + " " #Debug
-                            out_tags_pred = out_tags_pred + str(y_[j_]) + " " #Debug
-                            debug_file.write(out_text + "\n")
-                            debug_file.write(out_tags_truth + "\n")
-                            debug_file.write(out_tags_pred + "\n\n")
-                            out_text = "Text: "
-                            out_tags_truth = "Truth: "
-                            out_tags_pred = "Pred: "
-
+                            #PARTIAL
+                            phrase_matrix[config['CLASS_MAP'][truth_class]][1] += 1
+                            
+                            #Debug
+                            if "DEBUG" in config['CONFIGURATION']:
+                                start_ = min(truth_start, pred_start)
+                                end_ = max(truth_end, pred_end)
+                                
+                                write_phrase_debug_line(debug_file, start_, end_, y, "PAR", truth_start, truth_end, pred_start, pred_end)
+                                
+                            truth_start, truth_end, truth_class = get_annotation(y.original_sentence_array, truth_end+1)
+                            pred_start, pred_end, pred_class = get_annotation(y.modified_sentence_array, pred_end+1) 
+                    elif is_overlapped(truth_start, truth_end, pred_start, pred_end) == -1:
+                        #Pred is to the left, mark SUP and iterate.
+                        phrase_matrix[config['CLASS_MAP'][pred_class]][3] += 1
+                        
+                        #Debug
+                        if "DEBUG" in config['CONFIGURATION']:
+                            write_phrase_debug_line(debug_file, pred_start, pred_end, y, "SUPL_TP", truth_start, truth_end, pred_start, pred_end)
+                            
+                        pred_start, pred_end, pred_class = get_annotation(y.modified_sentence_array, pred_end+1)
                     else:
-                        if y_[j_] == y.original_sentence_array[j_][1]:
-                            cfm[cls, 0] += 1
-                        else:
-                            cfm[cls, 2] += 1
-                            debug_file.write("Text: " + str(y.original_sentence_array[j_][0]) +"\n") #DEBUG
-                            debug_file.write("Truth: " + str(y.original_sentence_array[j_][1]) +"\n") #DEBUG
-                            debug_file.write("Pred: " + str(y_[j_]) + "\n\n") #DEBUG
+                        #Pred is to the right, mark MIS and iterate.
+                        phrase_matrix[config['CLASS_MAP'][truth_class]][2] += 1
+                        
+                        #Debug
+                        if "DEBUG" in config['CONFIGURATION']:
+                            write_phrase_debug_line(debug_file, truth_start, truth_end, y, "MIS", truth_start, truth_end, pred_start, pred_end)
+                            
+                        truth_start, truth_end, truth_class = get_annotation(y.original_sentence_array, truth_end+1)
+                elif truth_start:
+                    #Missing Pred, mark MIS and iterate.
+                    phrase_matrix[config['CLASS_MAP'][truth_class]][2] += 1
+                    
+                    #Debug
+                    if "DEBUG" in config['CONFIGURATION']:
+                        write_phrase_debug_line(debug_file, truth_start, truth_end, y, "MIS", truth_start, truth_end, pred_start, pred_end)
 
-                j_ += 1
+                    truth_start, truth_end, truth_class = get_annotation(y.original_sentence_array, truth_end+1)
+                elif pred_start:
+                    #Superficial Pred, mark SUP and iterate.
+                    phrase_matrix[config['CLASS_MAP'][pred_class]][3] += 1
+                    
+                    #Debug
+                    if "DEBUG" in config['CONFIGURATION']:
+                        write_phrase_debug_line(debug_file, pred_start, pred_end, y, "SUP", truth_start, truth_end, pred_start, pred_end)
+                        
+                    pred_start, pred_end, pred_class = get_annotation(y.modified_sentence_array, pred_end+1)
+                else:
+                    #Nothing else.
+                    break
 
-        debug_file.close()
-        return cfm
+        #Debug
+        if "DEBUG" in config['CONFIGURATION']:
+            debug_file.close()
+            
+        return phrase_matrix
 
     def clean_up(self):
         """
@@ -277,3 +279,70 @@ class Agent:
         """
         self.sess.close()
         tf.reset_default_graph()
+        
+def get_annotation(sentence_array, start_index):
+    if start_index >= len(sentence_array):
+        return None, None, None
+
+    start, end, tag = -1, -1, ''
+
+    for j in range(start_index, len(sentence_array)):
+        if start > -1:
+            if sentence_array[j][1] == tag:
+                continue
+            else:
+                end = j-1
+                return start, end, tag
+        else:
+            if not sentence_array[j][1] == '':
+                start = j
+                tag = sentence_array[j][1]
+
+    if start > -1:
+        return start, len(sentence_array)-1, tag
+    else:
+        return None, None, None
+
+def is_overlapped(x_start, x_end, y_start, y_end):
+    if ((y_start >= x_start and y_end <= x_end) or (y_end >= x_start and y_start <= x_start) or (y_start <= x_end and y_end >= x_end)):
+        return 0
+    elif (y_end < x_start):
+        return -1
+    else:
+        return 1
+        
+def write_phrase_debug_line(debug_file, start, end, ss, type, x1, x2, y1, y2):
+    debug_file.write(type + "\n")
+    out_text_ = "Text: "
+    out_truth_ = "Truth: "
+    out_pred_ = "Pred: "  
+    
+    #for o in range(start, end+1):
+    for o in range(0, len(ss.original_sentence_array)):
+        out_text_ += ss.original_sentence_array[o][0] + " "
+        if not ss.original_sentence_array[o][1] == '':
+            out_truth_ += ss.original_sentence_array[o][1][0:4] + " "
+        else:
+            out_truth_ += 'none' + ' '
+        if not ss.modified_sentence_array[o][1] == '':
+            out_pred_ += ss.modified_sentence_array[o][1][0:4] + " "
+        else:
+            out_pred_ += 'none' + ' '
+    debug_file.write(out_text_ + "\n")
+    debug_file.write(out_truth_ + "\n")
+    debug_file.write(out_pred_ + "\n")
+    debug_file.write('Ranges: ' + str(x1) + ',' + str(x2) + ';' + str(y1) + ',' + str(y2) + '\n')
+    
+    """
+    out_text_ = "Text: "
+    out_truth_ = "Truth: "
+    out_pred_ = "Pred: "  
+
+    for o in range(start, end+1):
+        out_text_ += ss.original_sentence_array[o][0] + " "
+        out_truth_ += ss.original_sentence_array[o][1] + " "
+        out_pred_ += ss.modified_sentence_array[o][1] + " "
+        
+    debug_file.write(out_text_ + "\n")
+    debug_file.write(out_truth_ + "\n")
+    debug_file.write(out_pred_ + "\n\n")"""

@@ -106,17 +106,21 @@ def main():
     
     config = {'CONFIGURATION': config_dict}
  
-    feature_map = {"PUNC_OTHER" : 0,
-                   "PUNC_COMMA" : 1,
-                   "PUNC_PERIOD" : 2,
-                   "IS_NUM" : 3,
-                   "IS_DATE" : 4,
-                   "PROBLEM_ST" : 5,
-                   "TEST_ST" : 6,
-                   "TREATMENT_ST" : 7}
+    feature_map = {"IS_NUM" : 0,
+                   "IS_DATE" : 1,
+                   "IS_TIME" : 2,
+                   "PROBLEM_ST" : 3,
+                   "TEST_ST" : 4,
+                   "TREATMENT_ST" : 5}
                                    
     config['FEATURE_MAP'] = feature_map
     config['CLASS_LIST'] = config['CONFIGURATION']['CLASSES'].split(',')
+    
+    config['CLASS_MAP'] = {}
+    config['CLASS_MAP'][''] = 0
+    for i, el in enumerate(config['CLASS_LIST']):
+        config['CLASS_MAP'][el.lower()] = i+1
+
     config['NUM_FEATURES'] = int(config['CONFIGURATION']['EMBEDDING_SIZE']) + len(feature_map)
 
     #Iterate files and generate feature vectors.
@@ -163,10 +167,10 @@ def train_network(train_batch_container, file_sentence_dict, config, supplementa
 
     #Create and train the model for kFoldCrossValidation
     confusion_matrix_list = []
-    sentence_lenience_list = []
+    phrase_matrix_list = []
 
     for k in range(0, buckets):
-        trainer = agent.Agent(config['NUM_FEATURES'], 4, int(config['CONFIGURATION']['MAX_SENTENCE_LENGTH']))
+        trainer = agent.Agent(config['NUM_FEATURES'], len(config['CLASS_LIST'])+1, int(config['CONFIGURATION']['MAX_SENTENCE_LENGTH']))
 
         #Train supplemental for j epochs.
         if supplemental_batch:
@@ -187,21 +191,19 @@ def train_network(train_batch_container, file_sentence_dict, config, supplementa
             print("Loss for Epoch " + str(j) + " is " + str(loss) + ".")
 
         #Evaluate after training and store debugging files.
-        cf = trainer.eval(batch_x[k], batch_y[k], seq_len[k])
-        confusion_matrix_list.append(cf)
-
-        print(cf)
+        cm = trainer.eval_token_level(batch_x[k], batch_y[k], seq_len[k])
+        confusion_matrix_list.append(cm)
 
         file = open("./outCF", 'a')
-        outstr = np.array2string(cf)
+        outstr = np.array2string(cm)
         file.write(outstr)
         file.write("\n")
         file.close()
 
-        cf_ = trainer.eval_with_structure(batch_x[k], batch_y[k], seq_len[k], k, train_batch_container.mapping, batch_to_file_map, file_sentence_dict)
-        sentence_lenience_list.append(cf_)
+        pm = trainer.eval_phrase_level(batch_x[k], seq_len[k], k, train_batch_container.mapping, batch_to_file_map, file_sentence_dict, config)
+        phrase_matrix_list.append(pm)
         file = open("./outCFS", 'a')
-        outstr = np.array2string(cf_)
+        outstr = np.array2string(pm)
         file.write(outstr)
         file.write("\n")
         file.close()
@@ -209,6 +211,7 @@ def train_network(train_batch_container, file_sentence_dict, config, supplementa
         trainer.clean_up()
 
     #Run analysis generation.
+    """
     #TODO(Jeff) Create separate function for analysis generation.
 
     #Start with Majority Sense Baseline
@@ -286,7 +289,7 @@ def train_network(train_batch_container, file_sentence_dict, config, supplementa
         file.write("Micro F1 Average: \t" + str(np.sum(f1_micro_list[i, :])/buckets) + "\n")
         file.write("\n")
 
-    file.close()
+    file.close()"""
 
 def kfold_bucket_generator(batch_x, batch_y, seq_len, k):
     """
@@ -368,8 +371,9 @@ def generate_embeddings(file_sentence_dict, config):
     try:
         k = file_sentence_dict.keys()
         for k_ in k:
-            #TODO(Jeff) Add a debug flag for verbose outputs like this.
-            print(k_)
+            #Debug
+            if "DEBUG" in config['CONFIGURATION']:
+                print(k_)
             embedding_list_file = []
             f = open('./_arff/' + k_, 'w+')
             sentence_counter = 0
@@ -388,15 +392,8 @@ def generate_embeddings(file_sentence_dict, config):
                     p.stdin.flush()
 
                     class_ = 0
-
-                    #TODO(Jeff) This shouldn't be class specific. Make generic.
-                    if not "End" in x.original_sentence_array[z][1]:
-                        if "problem" in x.original_sentence_array[z][1]:
-                            class_ = 1
-                        elif "test" in x.original_sentence_array[z][1]:
-                            class_ = 2
-                        elif "treatment" in x.original_sentence_array[z][1]:
-                            class_ = 3
+                    if x.original_sentence_array[x.modified_sentence_array[z][2]][1] in config['CLASS_MAP']:
+                        class_ = config['CLASS_MAP'][x.original_sentence_array[z][1]]
 
                     while not p.poll():
                         t = p.stdout.readline()
@@ -417,27 +414,13 @@ def generate_embeddings(file_sentence_dict, config):
                             print(t)
 
                     #Generate Extra Features
-                    if x.modified_sentence_array[z][0] == ":":
-                        t_array[z][int(config['CONFIGURATION']['EMBEDDING_SIZE']) + config['FEATURE_MAP']["PUNC_OTHER"]] = 1.0
-                    elif x.modified_sentence_array[z][0] == ";":
-                        t_array[z][int(config['CONFIGURATION']['EMBEDDING_SIZE']) + config['FEATURE_MAP']["PUNC_OTHER"]] = 1.0
-                    elif x.modified_sentence_array[z][0] == ",":
-                        t_array[z][int(config['CONFIGURATION']['EMBEDDING_SIZE']) + config['FEATURE_MAP']["PUNC_COMMA"]] = 1.0
-                    elif x.modified_sentence_array[z][0] == ".":
-                        t_array[z][int(config['CONFIGURATION']['EMBEDDING_SIZE']) + config['FEATURE_MAP']["PUNC_PERIOD"]] = 1.0
-                    elif x.modified_sentence_array[z][0] == "[" or x.modified_sentence_array[z][0] == "]" or x.modified_sentence_array[z][0] == "(" or x.modified_sentence_array[z][0] == ")":
-                        t_array[z][int(config['CONFIGURATION']['EMBEDDING_SIZE']) + config['FEATURE_MAP']["PUNC_OTHER"]] = 1.0
-                    elif x.modified_sentence_array[z][0] == "&quot;":
-                        t_array[z][int(config['CONFIGURATION']['EMBEDDING_SIZE']) + config['FEATURE_MAP']["PUNC_OTHER"]] = 1.0
-                    elif x.modified_sentence_array[z][0] == "'" or x.modified_sentence_array[z][0] == "'s":
-                        t_array[z][int(config['CONFIGURATION']['EMBEDDING_SIZE']) + config['FEATURE_MAP']["PUNC_OTHER"]] = 1.0
-                    elif x.modified_sentence_array[z][0] == "num":
+                    if x.modified_sentence_array[z][0] == "num":
                         t_array[z][int(config['CONFIGURATION']['EMBEDDING_SIZE']) + config['FEATURE_MAP']["IS_NUM"]] = 1.0
                     elif x.modified_sentence_array[z][0] == "date":
                         t_array[z][int(config['CONFIGURATION']['EMBEDDING_SIZE']) + config['FEATURE_MAP']["IS_DATE"]] = 1.0
-                
- 
-                
+                    elif x.modified_sentence_array[z][0] == "time":
+                        t_array[z][int(config['CONFIGURATION']['EMBEDDING_SIZE']) + config['FEATURE_MAP']["IS_TIME"]] = 1.0
+
                 #Add embeddings to our arrays.
                 embedding_list_file.append(t_array)
                 class_list.append(c_array)
@@ -469,13 +452,13 @@ def generate_embeddings(file_sentence_dict, config):
     p.terminate()
 
     #Debug
-    #TODO(Jeff) Eventually remove debug features from parent pipeline.
     #Write words to file that were undefined in embedding list.
-    xF = open('undef.txt', 'a')
-    for x in undefined:
-        xF.write(x)
-        xF.write("\n")
-    xF.close()
+    if "DEBUG" in config['CONFIGURATION']:
+        xF = open('undef.txt', 'a')
+        for x in undefined:
+            xF.write(x)
+            xF.write("\n")
+        xF.close()
 
     return embedding_list, class_list, seq_list, mapping
 
@@ -549,7 +532,10 @@ def create_sentence_structures(raw_file_path):
             for sentence in doc.readlines():
                 #Create a SentenceStructure obj
                 ss = SentenceStructure(sentence)
-                ss.modified_sentence = doc_text_processed_split[counter]
+                lower_sentence = sentence.lower()
+                ss.modified_sentence = lower_sentence
+                #TODO(Jeff) Readd Preprocessed text.
+                #ss.modified_sentence = doc_text_processed_split[counter]
 
                 #Add SentenceStructure obj to the list
                 doc_sentence_structure_list.append(ss)
@@ -617,13 +603,9 @@ def annotate_sentence_structure(ss, annotations):
     """
     #Iterate over distinct annotations for a sentence
     for m in annotations:
-        for j in range(m.start_word, m.end_word + 2):
-            if j == m.start_word:
-                ss.original_sentence_array[j][1] = m.label + ':Start'
-            elif j == m.end_word + 1:
-                ss.original_sentence_array[j][1] = m.label + ':End'
-            else:
-                ss.original_sentence_array[j][1] = m.label
+        for j in range(m.start_word, m.end_word + 1):
+            ss.original_sentence_array[j][1] = m.label
+
     return ss
 
 def create_annotation_dictionary(annotation_file_path):

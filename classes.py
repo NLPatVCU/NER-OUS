@@ -4,6 +4,9 @@ Scope: Defines the major classes used by the module.
 Authors: Jeffrey Smith, Bill Cramer, Evan French
 """
 import re
+from copy import copy
+
+strip_map = set([':', ';', ',', '.', '[', '(', ']', ')', '-', '?', '&quot;', '&apos;', '&apos;s', '/', '#', '=', '+', '*', '%'])
 
 #Author: Jeffrey Smith
 class SentenceStructure:
@@ -34,13 +37,6 @@ class SentenceStructure:
                 token = [x, label]
             self.original_sentence_array.append(token)
 
-        #Add an end tag to the end of the array.
-        if not label:
-            self.original_sentence_array.append(["END", ""])
-        else:
-            self.original_sentence_array[0][1] = label + ":Start"
-            self.original_sentence_array.append(["END", label + ":End"])
-
     def generate_modified_sentence_array(self):
         """
         modified_sentence_array creator for SentenceStructure.
@@ -54,12 +50,23 @@ class SentenceStructure:
         counter = 0
 
         for x in self.modified_sentence.split():
-            token = [x, "", counter]
-            self.modified_sentence_array.append(token)
+            token = [x, '', counter]
             counter += 1
-        self.modified_sentence_array.append(["END", ""])
-
-        assert(len(self.original_sentence_array) == len(self.modified_sentence_array)), "Assertion failed, sentences don't match. Original Sentence: " + self.original_sentence +" Modified Sentence: " + self.modified_sentence
+            if not x in strip_map:
+                #TODO(Jeff) Replace with preprocessing later.
+                token[0] = re.sub(r'[\.-]', '', token[0])
+                token[0] = re.sub(r'^-?[\d]+[%\+]?$', 'num', token[0])
+                token[0] = re.sub(r'^[0-1]\d?/\d?\d(/\d\d)?(\d\d)?$', 'date', token[0])
+                token[0] = re.sub(r'^\d?\d:\d\d(:\d\d)?$', 'time', token[0])
+                self.modified_sentence_array.append(token)
+                
+    def rebuild_modified_sentence_array(self):
+        for x in range(0, len(self.original_sentence_array)):
+            if x >= len(self.modified_sentence_array) or self.modified_sentence_array[x][2] > x:
+                #Missing Value in array. Add it back in.
+                val = [self.original_sentence_array[x][0], '', x]
+                self.modified_sentence_array.insert(x, copy(val))
+                
 
 #Author: Jeffrey Smith
 class BatchContainer:
