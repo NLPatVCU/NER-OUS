@@ -24,6 +24,10 @@ def check_config_file(config):
         print("Missing MAX_SENTENCE_LENGTH in config.ini.")
         sys.exit(0)
         
+    if not 'USE_SEMANTIC_TYPES' in config:
+        print("Missing USE_SEMANTIC_TYPES in config.ini.")
+        sys.exit(0)
+        
     if not 'SEMANTIC_ANNOTATION_FILE_PATH' in config:
         print("Missing SEMANTIC_ANNOTATION_FILE_PATH in config.ini.")
         sys.exit(0)
@@ -64,7 +68,36 @@ def check_config_file(config):
         print("Missing CLASSES in config.ini")
         sys.exit(0)
 
-        
+def build_config_file(file_path):
+    #Parse config file and set up configuration classes.
+    config_file = configparser.ConfigParser()
+    config_file.read_file(open(file_path))
+    config_dict = config_file['Main']
+
+    check_config_file(config_dict)
+    
+    config = {'CONFIGURATION': config_dict}
+ 
+    feature_map = {"IS_NUM" : 0,
+                   "IS_DATE" : 1,
+                   "IS_TIME" : 2}
+    if config['CONFIGURATION']['USE_SEMANTIC_TYPES'] == '1':
+        feature_map['PROBLEM_ST'] = 3
+        feature_map["TEST_ST"] = 4
+        feature_map["TREATMENT_ST"] = 5
+                                   
+    config['FEATURE_MAP'] = feature_map
+    config['CLASS_LIST'] = config['CONFIGURATION']['CLASSES'].split(',')
+    
+    config['CLASS_MAP'] = {}
+    config['CLASS_MAP'][''] = 0
+    for i, el in enumerate(config['CLASS_LIST']):
+        config['CLASS_MAP'][el.lower()] = i+1
+
+    config['NUM_FEATURES'] = int(config['CONFIGURATION']['EMBEDDING_SIZE']) + len(feature_map)
+    
+    return config
+
 def main():
     """
     Main function of the application. Call -h or --help for command line inputs.
@@ -98,35 +131,15 @@ def main():
         return
         """
     #Parse config file and set up configuration classes.
-    config_file = configparser.ConfigParser()
-    config_file.read_file(open('config.ini'))
-    config_dict = config_file['Main']
-
-    check_config_file(config_dict)
-    
-    config = {'CONFIGURATION': config_dict}
- 
-    feature_map = {"IS_NUM" : 0,
-                   "IS_DATE" : 1,
-                   "IS_TIME" : 2,
-                   "PROBLEM_ST" : 3,
-                   "TEST_ST" : 4,
-                   "TREATMENT_ST" : 5}
-                                   
-    config['FEATURE_MAP'] = feature_map
-    config['CLASS_LIST'] = config['CONFIGURATION']['CLASSES'].split(',')
-    
-    config['CLASS_MAP'] = {}
-    config['CLASS_MAP'][''] = 0
-    for i, el in enumerate(config['CLASS_LIST']):
-        config['CLASS_MAP'][el.lower()] = i+1
-
-    config['NUM_FEATURES'] = int(config['CONFIGURATION']['EMBEDDING_SIZE']) + len(feature_map)
+    config = build_config_file('config.ini')
 
     #Iterate files and generate feature vectors.
     file_sentence_dict = create_annotated_sentence_structures(config['CONFIGURATION']['ANNOTATION_FILE_PATH'], config['CONFIGURATION']['RAW_FILE_PATH'])
     add_modified_sentence_array(file_sentence_dict)
-    helpers.build_semantic_type_annotations(config)
+    
+    if config['CONFIGURATION']['USE_SEMANTIC_TYPES'] == '1':
+        helpers.build_semantic_type_annotations(config)
+        
     tx, ty, ts, tm = generate_embeddings(file_sentence_dict, config)
     train_batch_container = BatchContainer(tx, ty, ts, tm)
 
@@ -433,8 +446,9 @@ def generate_embeddings(file_sentence_dict, config):
             f.close()
             
             #Add Semantic Embeddings
-            sem_loc = os.path.join(config['CONFIGURATION']['SEMANTIC_ANNOTATION_FILE_PATH'], k_ + '.st')
-            add_semantic_features(config, sem_loc, embedding_list_file)
+            if config['CONFIGURATION']['USE_SEMANTIC_TYPES'] == '1':
+                sem_loc = os.path.join(config['CONFIGURATION']['SEMANTIC_ANNOTATION_FILE_PATH'], k_ + '.st')
+                add_semantic_features(config, sem_loc, embedding_list_file)
 
             #Add Document Embeddings to List
             embedding_list.extend(embedding_list_file)

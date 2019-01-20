@@ -12,6 +12,15 @@ import run
 import agent
 
 class AgentTestClass(unittest.TestCase):
+    def test_build_sentence_tags(self):
+        config = run.build_config_file('config.ini')
+        pred_class_list = [0, 1, 2, 3]
+        new_class_list = agent.build_sentence_tags(config, 4, pred_class_list)
+        self.assertEqual(new_class_list[0], '')
+        self.assertEqual(new_class_list[1], 'problem')
+        self.assertEqual(new_class_list[2], 'test')
+        self.assertEqual(new_class_list[3], 'treatment')
+        
     def test_is_overlapped(self):
         self.assertEqual(agent.is_overlapped(2, 4, 5, 8), 1) #Right Far
         self.assertEqual(agent.is_overlapped(0, 4, 4, 8), 0) #Right Edge

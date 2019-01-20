@@ -144,50 +144,17 @@ class Agent:
             batch_index = batch_map[k][i]
             original_index = file_map[batch_index]
             y = sentence_dict[original_index[0]][original_index[1]]
-            y_ = []
+            
 
             #Build sentence tags
-            for j in range(0, seq_len[i]):
-                pred_class = int(i_pred_argmax[j])
-                if pred_class > 0:
-                    y_.append(config['CLASS_LIST'][pred_class-1].lower())
-                else:
-                    y_.append('')
+            y_ = build_sentence_tags(config, seq_len[i], i_pred_argmax)
                 
             #Add Tags to Modified Sentence
             for m, el in enumerate(y.modified_sentence_array):
                 el[1] = y_[m]
                 
             #Rebuild Modified Sentence
-            y.rebuild_modified_sentence_array()            
-            
-            #Modifiy special characters
-            m = 0
-            while m < len(y.modified_sentence_array):
-                #Check if the character in this position is a special character. If so, process
-                if y.modified_sentence_array[m][0] == ',':
-                    if m > 0 and m < len(y.modified_sentence_array)-1 and y.modified_sentence_array[m-1][1] == y.modified_sentence_array[m+1][1]:
-                        y.modified_sentence_array[m][1] = y.modified_sentence_array[m-1][1]
-                elif y.modified_sentence_array[m][0] == '/':
-                    if m > 0 and m < len(y.modified_sentence_array)-1 and y.modified_sentence_array[m-1][1] == y.modified_sentence_array[m+1][1]:
-                        y.modified_sentence_array[m][1] = y.modified_sentence_array[m-1][1]                    
-                elif y.modified_sentence_array[m][0] == '[' or y.modified_sentence_array[m][0] == '(':
-                    if m < len(y.modified_sentence_array)-1 and not y.modified_sentence_array[m+1][1] == '':
-                        y.modified_sentence_array[m][1] = y.modified_sentence_array[m+1][1]                      
-                elif y.modified_sentence_array[m][0] == ')' or y.modified_sentence_array[m][0] == ')' or y.modified_sentence_array[m] == '&apos;s':
-                    if m > 0 and not y.modified_sentence_array[m-1][1] == '':
-                        y.modified_sentence_array[m][1] = y.modified_sentence_array[m-1][1]    
-                elif y.modified_sentence_array[m][0] == '&quot;' and not y.modified_sentence_array[m][1]:
-                    quot_loc = -1
-                    for p in range(m+1, len(y.modified_sentence_array)):
-                        if y.modified_sentence_array[p][0] == '&quot;':
-                            quot_loc = p
-                            break
-                    if quot_loc > -1:
-                        y.modified_sentence_array[m][1] = y.modified_sentence_array[m+1][1]
-                        y.modified_sentence_array[quot_loc][1] = y.modified_sentence_array[m+1][1]
-                        
-                m += 1
+            y.rebuild_modified_sentence_array()
                 
             #Find each phrase group in original sentence and check it against predicted values.
             truth_start, truth_end, truth_class = get_annotation(y.original_sentence_array, 0)
@@ -310,7 +277,18 @@ def is_overlapped(x_start, x_end, y_start, y_end):
         return -1
     else:
         return 1
-        
+     
+def build_sentence_tags(config, seq_len, pred_class_list):
+    #Build sentence tags
+    return_class_list = []
+    for j in range(0, seq_len):
+        pred_class = int(pred_class_list[j])
+        if pred_class > 0:
+            return_class_list.append(config['CLASS_LIST'][pred_class-1].lower())
+        else:
+            return_class_list.append('')     
+    return return_class_list
+            
 def write_phrase_debug_line(debug_file, start, end, ss, type, x1, x2, y1, y2):
     debug_file.write(type + "\n")
     out_text_ = "Text: "

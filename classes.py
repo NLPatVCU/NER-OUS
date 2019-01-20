@@ -8,6 +8,14 @@ from copy import copy
 
 strip_map = set([':', ';', ',', '.', '[', '(', ']', ')', '-', '?', '&quot;', '&apos;', '&apos;s', '/', '#', '=', '+', '*', '%'])
 
+#TODO(Jeff) Replace with preprocessing later.
+def process_token(token):
+    token = re.sub(r'[\.-]', '', token)
+    token = re.sub(r'^-?[\d]+[%\+]?$', 'num', token)
+    token = re.sub(r'^[0-1]\d?/\d?\d(/\d\d)?(\d\d)?$', 'date', token)
+    token = re.sub(r'^\d?\d:\d\d(:\d\d)?$', 'time', token)
+    return token
+
 #Author: Jeffrey Smith
 class SentenceStructure:
     """
@@ -37,7 +45,7 @@ class SentenceStructure:
                 token = [x, label]
             self.original_sentence_array.append(token)
 
-    def generate_modified_sentence_array(self):
+    def generate_modified_sentence_array(self, allow_stripping=False):
         """
         modified_sentence_array creator for SentenceStructure.
 
@@ -52,20 +60,48 @@ class SentenceStructure:
         for x in self.modified_sentence.split():
             token = [x, '', counter]
             counter += 1
-            if not x in strip_map:
+            if not allow_stripping or not x in strip_map:
                 #TODO(Jeff) Replace with preprocessing later.
-                token[0] = re.sub(r'[\.-]', '', token[0])
-                token[0] = re.sub(r'^-?[\d]+[%\+]?$', 'num', token[0])
-                token[0] = re.sub(r'^[0-1]\d?/\d?\d(/\d\d)?(\d\d)?$', 'date', token[0])
-                token[0] = re.sub(r'^\d?\d:\d\d(:\d\d)?$', 'time', token[0])
+                token[0] = process_token(token[0])
                 self.modified_sentence_array.append(token)
-                
+
+    def rebuild_modified_sentence_array_tags(self):
+        #Modifiy special characters
+        m = 0
+        while m < len(self.modified_sentence_array):
+            #Check if the character in this position is a special character. If so, process
+            if self.modified_sentence_array[m][0] == ',':
+                if m > 0 and m < len(self.modified_sentence_array)-1 and self.modified_sentence_array[m-1][1] == self.modified_sentence_array[m+1][1]:
+                    self.modified_sentence_array[m][1] = self.modified_sentence_array[m-1][1]
+            elif self.modified_sentence_array[m][0] == '/':
+                if m > 0 and m < len(self.modified_sentence_array)-1 and self.modified_sentence_array[m-1][1] == self.modified_sentence_array[m+1][1]:
+                    self.modified_sentence_array[m][1] = self.modified_sentence_array[m-1][1]                    
+            elif self.modified_sentence_array[m][0] == '[' or self.modified_sentence_array[m][0] == '(':
+                if m < len(self.modified_sentence_array)-1 and not self.modified_sentence_array[m+1][1] == '':
+                    self.modified_sentence_array[m][1] = self.modified_sentence_array[m+1][1]                      
+            elif self.modified_sentence_array[m][0] == ')' or self.modified_sentence_array[m][0] == ')' or self.modified_sentence_array[m] == '&apos;s':
+                if m > 0 and not self.modified_sentence_array[m-1][1] == '':
+                    self.modified_sentence_array[m][1] = self.modified_sentence_array[m-1][1]    
+            elif self.modified_sentence_array[m][0] == '&quot;' and not self.modified_sentence_array[m][1]:
+                quot_loc = -1
+                for p in range(m+1, len(self.modified_sentence_array)):
+                    if self.modified_sentence_array[p][0] == '&quot;':
+                        quot_loc = p
+                        break
+                if quot_loc > -1:
+                    self.modified_sentence_array[m][1] = self.modified_sentence_array[m+1][1]
+                    self.modified_sentence_array[quot_loc][1] = self.modified_sentence_array[m+1][1]
+                    
+            m += 1
+
     def rebuild_modified_sentence_array(self):
         for x in range(0, len(self.original_sentence_array)):
             if x >= len(self.modified_sentence_array) or self.modified_sentence_array[x][2] > x:
                 #Missing Value in array. Add it back in.
                 val = [self.original_sentence_array[x][0], '', x]
                 self.modified_sentence_array.insert(x, copy(val))
+        self.rebuild_modified_sentence_array_tags()
+                
                 
 
 #Author: Jeffrey Smith
