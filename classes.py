@@ -11,9 +11,9 @@ strip_map = set([':', ';', ',', '.', '[', '(', ']', ')', '-', '?', '&quot;', '&a
 #TODO(Jeff) Replace with preprocessing later.
 def process_token(token):
     token = re.sub(r'[\.-]', '', token)
-    token = re.sub(r'^-?[\d]+[%\+]?$', 'num', token)
-    token = re.sub(r'^[0-1]\d?/\d?\d(/\d\d)?(\d\d)?$', 'date', token)
-    token = re.sub(r'^\d?\d:\d\d(:\d\d)?$', 'time', token)
+    token = re.sub(r'^-?[\d]+[%\+]?$', '__num__', token)
+    token = re.sub(r'^[0-1]\d?/\d?\d(/\d\d)?(\d\d)?$', '__date__', token)
+    token = re.sub(r'^\d?\d:\d\d(:\d\d)?$', '__time__', token)
     return token
 
 #Author: Jeffrey Smith

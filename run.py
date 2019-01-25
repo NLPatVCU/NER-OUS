@@ -4,6 +4,7 @@ import sys
 import os
 import subprocess
 import configparser
+import getopt
 from random import sample
 
 import numpy as np
@@ -28,17 +29,18 @@ def check_config_file(config):
         print("Missing USE_SEMANTIC_TYPES in config.ini.")
         sys.exit(0)
         
-    if not 'SEMANTIC_ANNOTATION_FILE_PATH' in config:
-        print("Missing SEMANTIC_ANNOTATION_FILE_PATH in config.ini.")
-        sys.exit(0)
-        
-    if not 'OVERRIDE_SEMANTIC_ANNOTATIONS' in config:
-        print("Missing OVERRIDE_SEMANTIC_ANNOTATIONS in config.ini.")
-        sys.exit(0)
-        
-    if not 'METAMAP_PATH' in config:
-        print("Missing METAMAP_PATH in config.ini.")
-        sys.exit(0)
+    elif config['USE_SEMANTIC_TYPES'] == '1':
+        if not 'SEMANTIC_ANNOTATION_FILE_PATH' in config:
+            print("Missing SEMANTIC_ANNOTATION_FILE_PATH in config.ini.")
+            sys.exit(0)
+            
+        if not 'OVERRIDE_SEMANTIC_ANNOTATIONS' in config:
+            print("Missing OVERRIDE_SEMANTIC_ANNOTATIONS in config.ini.")
+            sys.exit(0)
+            
+        if not 'METAMAP_PATH' in config:
+            print("Missing METAMAP_PATH in config.ini.")
+            sys.exit(0)
         
     if not 'EMBEDDING_SIZE' in config:
         print("Missing EMBEDDING_SIZE in config.ini")
@@ -103,7 +105,7 @@ def main():
     Main function of the application. Call -h or --help for command line inputs.
     """
     mode, outputDirectory, modelFile = None, None, None
-    """
+    
     #Process command line entries.
     opts, args = getopt.getopt(sys.argv[1:], 'm:i:o:d:a:h',["mode=","output=","model=","help"])
     for opt, arg, in opts:
@@ -112,9 +114,9 @@ def main():
         elif opt in ("-o","--output"):
             outputDirectory = arg
         elif opt in ("-d","--model"):
-            modelFile = arg
+            model_file = arg
         elif opt in ("-h","--help"):
-            printHelp()
+            print_help()
             return
         
     #Verify if needed command line entries are present.
@@ -123,13 +125,14 @@ def main():
         print("train creates a model file, eval evaluates annotated text using a model, and annotate creates an annotation file using a model.")
         return
         
-    elif mode == "eval" and modelFile == None:
+    elif mode == "eval" and model_file == None:
         print("You must specify a model to use for evaluation using -d or --model.")
-        
-    if outputDirectory == None:
-        print("You must specify a directory for output files with -o or --output.")
         return
-        """
+        
+    #if outputDirectory == None:
+    #    print("You must specify a directory for output files with -o or --output.")
+    #    return
+        
     #Parse config file and set up configuration classes.
     config = build_config_file('config.ini')
 
@@ -142,25 +145,56 @@ def main():
         
     tx, ty, ts, tm = generate_embeddings(file_sentence_dict, config)
     train_batch_container = BatchContainer(tx, ty, ts, tm)
-
-    #Train the network.
-    train_network(train_batch_container, file_sentence_dict, config)
+    
+    if mode == "analysis":
+        #Train the network with k-fold cross validation and report analysis.
+        train_network_analysis(train_batch_container, file_sentence_dict, config)
+    elif mode == "train":
+        #Build a model file for exporting.
+        train_network_model(train_batch_container, config)
+    elif mode == "eval":
+        evaluate_network_model(train_batch_container, config, model_file)
+    #elif mode == "annotate":
+    
+        
 
    
-def printHelp():
+def print_help():
     """
     Prints out the command line help information.
     """ 
     print("Options:")
-    print("-m/--mode [train,eval,annotate] : Specify the mode of the system.")
+    print("-m/--mode [train,eval,annotate,analysis] : Specify the mode of the system.")
     print("-o/--output DIR : Specify the output directory to write to.")
     print("-d/--model FILE : Specify a model to use when running in eval mode.")
     
     return
 
-def train_network(train_batch_container, file_sentence_dict, config, supplemental_batch=None):
+def evaluate_network_model(train_batch_container, config, model_file):
+    trainer = agent.Agent(config['NUM_FEATURES'], len(config['CLASS_LIST'])+1, int(config['CONFIGURATION']['MAX_SENTENCE_LENGTH']))
+    trainer.load_model(model_file)
+    cm = trainer.eval_token_level(train_batch_container.bx, train_batch_container.by, train_batch_container.bs)
+    print(cm)    
+    
+def train_network_model(train_batch_container, config):
     """
-    Trains a neural network model. If one is not given, creates one.
+    Trains a neural network model and saves it.
+
+    :param train_batch_container: A BatchContainer object containing the data to be trained.
+    :param config: A configuration instance from configparser.
+    :return: Nothing.
+    """
+    epochs = int(config['CONFIGURATION']['EPOCHS'])
+    trainer = agent.Agent(config['NUM_FEATURES'], len(config['CLASS_LIST'])+1, int(config['CONFIGURATION']['MAX_SENTENCE_LENGTH']))
+    
+    for k in range(0, epochs):
+        trainer.train(train_batch_container.bx, train_batch_container.by, train_batch_container.bs)
+        
+    trainer.save_model("./test_model.ckpt")    
+
+def train_network_analysis(train_batch_container, file_sentence_dict, config, supplemental_batch=None):
+    """
+    Trains a neural network model and reports analysis usking k-fold cross validation.
 
     :param train_batch_container: A BatchContainer object containing the data to be trained.
     :param file_sentence_dict: Map containing SentenceStructures of all files in memory. Used for generating analysis.
@@ -171,57 +205,71 @@ def train_network(train_batch_container, file_sentence_dict, config, supplementa
     buckets = int(config['CONFIGURATION']['BUCKETS'])
     epochs = int(config['CONFIGURATION']['EPOCHS'])
 
-    #Setup Buckets for 10 fold cross validation
+    #Setup Buckets for k fold cross validation
     batch_x, batch_y, seq_len, batch_to_file_map = kfold_bucket_generator(train_batch_container.bx, train_batch_container.by, train_batch_container.bs, buckets)
-
+        
     #TODO(Jeff) Clean up supplemental_batch information.
     if supplemental_batch:
-        sup_batch_x, sup_batch_y, sup_seq_len, _ = kfold_bucket_generator(supplemental_batch.bx, supplemental_batch.by, supplemental_batch.bs, 10)
+        sup_batch_x, sup_batch_y, sup_seq_len, _ = kfold_bucket_generator(supplemental_batch.bx, supplemental_batch.by, supplemental_batch.bs, epochs)
 
     #Create and train the model for kFoldCrossValidation
     confusion_matrix_list = []
     phrase_matrix_list = []
+    
+    if buckets > 1:
+        for k in range(0, buckets):
+            trainer = agent.Agent(config['NUM_FEATURES'], len(config['CLASS_LIST'])+1, int(config['CONFIGURATION']['MAX_SENTENCE_LENGTH']))
 
-    for k in range(0, buckets):
+            #Train supplemental for j epochs.
+            if supplemental_batch:
+                for j in range(0, epochs):
+                    for l in range(0, epochs):
+                        trainer.train(sup_batch_x[l], sup_batch_y[l], sup_seq_len[l])
+
+            #Train normal for j epochs.
+            for j in range(0, epochs):
+                loss = 0
+
+                #Train each bucket where l != current K
+                for l in range(0, buckets):
+                    if l == k:
+                        continue
+                    loss += trainer.train(batch_x[l], batch_y[l], seq_len[l])
+
+                print("Loss for Epoch " + str(j) + " is " + str(loss) + ".")
+
+            #Evaluate after training and store debugging files.
+            cm = trainer.eval_token_level(batch_x[k], batch_y[k], seq_len[k])
+            confusion_matrix_list.append(cm)
+
+            file = open("./outCF", 'a')
+            outstr = np.array2string(cm)
+            file.write(outstr)
+            file.write("\n")
+            file.close()
+
+            pm = trainer.eval_phrase_level(batch_x[k], seq_len[k], k, train_batch_container.mapping, batch_to_file_map, file_sentence_dict, config)
+            phrase_matrix_list.append(pm)
+            file = open("./outCFS", 'a')
+            outstr = np.array2string(pm)
+            file.write(outstr)
+            file.write("\n")
+            file.close()
+
+            trainer.clean_up()
+    else:
         trainer = agent.Agent(config['NUM_FEATURES'], len(config['CLASS_LIST'])+1, int(config['CONFIGURATION']['MAX_SENTENCE_LENGTH']))
-
+        
         #Train supplemental for j epochs.
         if supplemental_batch:
             for j in range(0, epochs):
-                for l in range(0, 10):
-                    trainer.train(sup_batch_x[l], sup_batch_y[l], sup_seq_len[l])
-
+                trainer.train(sup_batch_x[0], sup_batch_y[0], sup_seq_len[0])
+                    
         #Train normal for j epochs.
         for j in range(0, epochs):
-            loss = 0
-
-            #Train each bucket where l != current K
-            for l in range(0, buckets):
-                if l == k:
-                    continue
-                loss += trainer.train(batch_x[l], batch_y[l], seq_len[l])
-
+            loss = trainer.train(batch_x[0], batch_y[0], seq_len[0])
             print("Loss for Epoch " + str(j) + " is " + str(loss) + ".")
-
-        #Evaluate after training and store debugging files.
-        cm = trainer.eval_token_level(batch_x[k], batch_y[k], seq_len[k])
-        confusion_matrix_list.append(cm)
-
-        file = open("./outCF", 'a')
-        outstr = np.array2string(cm)
-        file.write(outstr)
-        file.write("\n")
-        file.close()
-
-        pm = trainer.eval_phrase_level(batch_x[k], seq_len[k], k, train_batch_container.mapping, batch_to_file_map, file_sentence_dict, config)
-        phrase_matrix_list.append(pm)
-        file = open("./outCFS", 'a')
-        outstr = np.array2string(pm)
-        file.write(outstr)
-        file.write("\n")
-        file.close()
-
-        trainer.clean_up()
+        
 
     #Run analysis generation.
     """
@@ -427,11 +475,11 @@ def generate_embeddings(file_sentence_dict, config):
                             print(t)
 
                     #Generate Extra Features
-                    if x.modified_sentence_array[z][0] == "num":
+                    if x.modified_sentence_array[z][0] == "__num__":
                         t_array[z][int(config['CONFIGURATION']['EMBEDDING_SIZE']) + config['FEATURE_MAP']["IS_NUM"]] = 1.0
-                    elif x.modified_sentence_array[z][0] == "date":
+                    elif x.modified_sentence_array[z][0] == "__date__":
                         t_array[z][int(config['CONFIGURATION']['EMBEDDING_SIZE']) + config['FEATURE_MAP']["IS_DATE"]] = 1.0
-                    elif x.modified_sentence_array[z][0] == "time":
+                    elif x.modified_sentence_array[z][0] == "__time__":
                         t_array[z][int(config['CONFIGURATION']['EMBEDDING_SIZE']) + config['FEATURE_MAP']["IS_TIME"]] = 1.0
 
                 #Add embeddings to our arrays.

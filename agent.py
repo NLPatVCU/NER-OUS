@@ -17,7 +17,6 @@ class Agent:
     def __init__(self, num_features, num_classes, max_sentence_length, hidden_layer_size=256):
         """
         Constructor for Agent. Sets self parameters, builds the network, and initializes Tensorflow.
-
         :param num_features: The amount of features that will be present in the data.
         :param num_classes: The number of classes that will be present in the final results.
         :param max_sentence_length: The maximum number of characters that will be present in a sentence. If you go over, the network will throw an exception.
@@ -41,10 +40,8 @@ class Agent:
     def build_network(self):
         """
         Internal function to build the network of the agent.
-
         :return: Nothing.
         """
-
         #Initializers
         self.initializer = tf.contrib.layers.variance_scaling_initializer(dtype=tf.float32)
         self.initializer_bias = tf.zeros_initializer()
@@ -65,7 +62,9 @@ class Agent:
         l1_flat = tf.reshape(l1_concat, [-1, 2*self.layer_size])
 
         #Dense Layer and Reshape
-        prediction_dense = tf.layers.dense(inputs=l1_flat, units=self.num_classes, activation=None, use_bias=True, bias_initializer=self.initializer_bias, kernel_initializer=self.initializer, trainable=True)
+        self.dropperc = tf.placeholder(tf.float32)
+        l1_drop = tf.nn.dropout(l1_flat, self.dropperc)
+        prediction_dense = tf.layers.dense(inputs=l1_drop, units=self.num_classes, activation=None, use_bias=True, bias_initializer=self.initializer_bias, kernel_initializer=self.initializer, trainable=True)
         self.prediction = tf.reshape(prediction_dense, [-1, self.max_sentence_length, self.num_classes])
 
         #CRF Layer and Log Likelihood Error
@@ -77,29 +76,36 @@ class Agent:
         self.update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
         with tf.control_dependencies(self.update_ops):
             self.optimizer = tf.train.AdamOptimizer(learning_rate=0.01).minimize(self.loss)
+            
+        #Model Saver
+        self.saver = tf.train.Saver()
+
+    def save_model(self, file_path):
+        self.saver.save(self.sess, file_path)
+        
+    def load_model(self, file_path):
+        self.saver.restore(self.sess, file_path)
 
     def train(self, batch_x, batch_y, seq_len):
         """
         Function to train the network.
-
         :param batch_x: The data to be fed into the network.
         :param batch_y: The labels that the batch will be trained against.
         :param seq_len: The true length of each sentence in the batch.
         :return: loss as float.
         """
-        loss, _ = self.sess.run([self.loss, self.optimizer], {self.input: batch_x, self.truth: batch_y, self.seq_len: seq_len})
+        loss, _ = self.sess.run([self.loss, self.optimizer], {self.input: batch_x, self.truth: batch_y, self.seq_len: seq_len, self.dropperc: 0.5})
         return loss
 
     def eval_token_level(self, batch_x, batch_y, seq_len):
         """
         Function to evaluate network at the token level for a ground truth set.
-
         :param batch_x: The data to be fed into the network.
         :param batch_y: The labels that the batch will be tested against.
         :param seq_len: The true length of each sentence in the batch.
         :return: (NxN) confusion matrix representing confusion matrix.
         """
-        pred = self.sess.run(self.prediction, {self.input: batch_x, self.seq_len: seq_len})
+        pred = self.sess.run(self.prediction, {self.input: batch_x, self.seq_len: seq_len, self.dropperc: 1.0})
 
         confusion_matrix = np.zeros((self.num_classes, self.num_classes), dtype=np.int32)
 
@@ -117,7 +123,6 @@ class Agent:
     def eval_phrase_level(self, batch_x, seq_len, k, file_map, batch_map, sentence_dict, config):
         """
         Function to evaluate the network at the phrase level for a ground truth set.
-
         :param batch_x: The data to be fed into the network.
         :param seq_len: The true length of each sentence in the batch.
         :param k: The current bucket index.
@@ -126,7 +131,7 @@ class Agent:
         :param sentence_dict: Dictionary of our sentence structures.
         :return: Numpy array representing confusion matrix.   (Nx4) matrix representing phrase level characteristics. COR/PAR/MIS/SUP
         """
-        pred = self.sess.run(self.prediction, {self.input: batch_x, self.seq_len: seq_len})
+        pred = self.sess.run(self.prediction, {self.input: batch_x, self.seq_len: seq_len, self.dropperc: 1.0})
 
         #Matrix in the form class,true span, partial span, wrong
         phrase_matrix = np.zeros((self.num_classes, 4), dtype=np.int32)
@@ -241,7 +246,6 @@ class Agent:
     def clean_up(self):
         """
         Function to free resources of the network and reset the default graph.
-
         :return: Nothing.
         """
         self.sess.close()
@@ -309,13 +313,16 @@ def write_phrase_debug_line(debug_file, start, end, ss, type, x1, x2, y1, y2):
     debug_file.write(out_text_ + "\n")
     debug_file.write(out_truth_ + "\n")
     debug_file.write(out_pred_ + "\n")
-    debug_file.write('Ranges: ' + str(x1) + ',' + str(x2) + ';' + str(y1) + ',' + str(y2) + '\n')
+    if not x1 == None and not ss.original_sentence_array[x1][1] == '':
+        debug_file.write("Tag: " + str(ss.original_sentence_array[x1][1]) + '\n')
+    else:
+        debug_file.write("Tag: none\n")
+    debug_file.write('Ranges: ' + str(x1) + ',' + str(x2) + ';' + str(y1) + ',' + str(y2) + '\n\n')
     
     """
     out_text_ = "Text: "
     out_truth_ = "Truth: "
     out_pred_ = "Pred: "  
-
     for o in range(start, end+1):
         out_text_ += ss.original_sentence_array[o][0] + " "
         out_truth_ += ss.original_sentence_array[o][1] + " "
