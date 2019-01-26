@@ -5,6 +5,7 @@ import os
 import subprocess
 import configparser
 import getopt
+import datetime
 from random import sample
 
 import numpy as np
@@ -121,8 +122,8 @@ def main():
         
     #Verify if needed command line entries are present.
     if mode == None:
-        print("You must specify a mode to use with -m or --mode. Options are train, eval, and annotate.")
-        print("train creates a model file, eval evaluates annotated text using a model, and annotate creates an annotation file using a model.")
+        print("You must specify a mode to use with -m or --mode. Options are train, eval, annotate, and analysis.")
+        print("train creates a model file, eval evaluates annotated text using a model, annotate creates an annotation file using a model, and analysis runs k-fold cross validation using a training set.")
         return
         
     elif mode == "eval" and model_file == None:
@@ -272,17 +273,17 @@ def train_network_analysis(train_batch_container, file_sentence_dict, config, su
         
 
     #Run analysis generation.
-    """
-    #TODO(Jeff) Create separate function for analysis generation.
-
+    generate_analysis_file(confusion_matrix_list, phrase_matrix_list, config)
+    
+def generate_analysis_file(confusion_matrix_list, phrase_matrix_list, config):
+    class_count = len(config['CLASS_LIST'])+1
+    
     #Start with Majority Sense Baseline
-    class_count = len(confusion_matrix_list[0])
     majority_sense_data = np.zeros((1, class_count), dtype=np.int32)
-
     for i in confusion_matrix_list:
         for j in range(0, class_count):
             for k in range(0, class_count):
-                majority_sense_data[0, k] += i[j, k]
+                majority_sense_data[0, k] += i[j, k]   
 
     class_none_micro_precision = 1.0 * majority_sense_data[0, 0] / np.sum(majority_sense_data[0, :])
     class_none_micro_recall = 1.0
@@ -290,36 +291,47 @@ def train_network_analysis(train_batch_container, file_sentence_dict, config, su
 
     class_none_macro_precision = class_none_micro_precision/class_count
     class_none_macro_recall = 1.0/class_count
-    class_none_macro_f1_score = class_none_micro_f1_score/class_count
+    class_none_macro_f1_score = class_none_micro_f1_score/class_count   
 
-    #Now for all the individual buckets.
+    #Token Level Analysis
     precision_micro_list = np.zeros((class_count, len(confusion_matrix_list)), dtype=np.float32)
     recall_micro_list = np.zeros((class_count, len(confusion_matrix_list)), dtype=np.float32)
     f1_micro_list = np.zeros((class_count, len(confusion_matrix_list)), dtype=np.float32)
     precision_macro_list = []
     recall_macro_list = []
-    f1_macro_list = []
-
-    #TODO(Jeff) Convert to enumerate.
-    for i in range(0, len(confusion_matrix_list)):
+    f1_macro_list = []    
+    
+    for i, cm in enumerate(confusion_matrix_list):
         for j in range(0, class_count):
-            precision_micro_list[j, i] = 1.0 * confusion_matrix_list[i][j, j] / np.sum(confusion_matrix_list[i][j, :])
-            recall_micro_list[j, i] = 1.0 * confusion_matrix_list[i][j, j] / np.sum(confusion_matrix_list[i][:, j])
+            precision_micro_list[j, i] = 1.0 * cm[j, j] / np.sum(cm[j, :])
+            recall_micro_list[j, i] = 1.0 * cm[j, j] / np.sum(cm[:, j])
             f1_micro_list[j, i] = 2.0 * ((precision_micro_list[j, i] * recall_micro_list[j, i]) / (precision_micro_list[j, i] + recall_micro_list[j, i]))
-
+            
         precision_macro_list.append((np.sum(precision_micro_list[:, i])/class_count))
         recall_macro_list.append((np.sum(recall_micro_list[:, i])/class_count))
         f1_macro_list.append((np.sum(f1_micro_list[:, i])/class_count))
-
-    #Process Sentence Lenience Lists
-    total_sentence_lenience = np.zeros((class_count, 3), dtype=np.int32)
-
-    for i in sentence_lenience_list:
-        total_sentence_lenience[:, :] += i[:, :]
-
+        
+    #Phrase Level Analysis
+    strict_phrase_precision_micro_list = np.zeros((class_count-1, len(phrase_matrix_list)), dtype=np.float32)
+    strict_phrase_recall_micro_list = np.zeros((class_count-1, len(phrase_matrix_list)), dtype=np.float32)
+    strict_phrase_f1_micro_list = np.zeros((class_count-1, len(phrase_matrix_list)), dtype=np.float32)
+    lenient_phrase_precision_micro_list = np.zeros((class_count-1, len(phrase_matrix_list)), dtype=np.float32)
+    lenient_phrase_recall_micro_list = np.zeros((class_count-1, len(phrase_matrix_list)), dtype=np.float32)
+    lenient_phrase_f1_micro_list = np.zeros((class_count-1, len(phrase_matrix_list)), dtype=np.float32)
+    
+    for i, cm in enumerate(phrase_matrix_list):
+        for j in range(1, class_count):
+            strict_phrase_precision_micro_list[j-1, i] = cm[j,0] / (cm[j,0] + cm[j,1] + cm[j,3])
+            strict_phrase_recall_micro_list[j-1, i] = cm[j,0] / (cm[j,0] + cm[j,1] + cm[j,2])
+            strict_phrase_f1_micro_list[j-1, i] = 2.0 * ((strict_phrase_precision_micro_list[j-1, i] * strict_phrase_recall_micro_list[j-1, i]) / (strict_phrase_precision_micro_list[j-1, i] + strict_phrase_recall_micro_list[j-1, i]))
+            lenient_phrase_precision_micro_list[j-1, i] = (cm[j,0] + cm[j,1])  / (cm[j,0] + cm[j,1] + cm[j,3])
+            lenient_phrase_recall_micro_list[j-1, i] = (cm[j,0] + cm[j,1]) / (cm[j,0] + cm[j,1] + cm[j,2])
+            lenient_phrase_f1_micro_list[j-1, i] = 2.0 * ((lenient_phrase_precision_micro_list[j-1, i] * lenient_phrase_recall_micro_list[j-1, i]) / (lenient_phrase_precision_micro_list[j-1, i] + lenient_phrase_recall_micro_list[j-1, i]))                
+            
     #Write Information to file
     file = open("./analysis.txt", 'a')
-
+    file.write(str(datetime.datetime.now()) + '\n\n')
+ 
     file.write("===Majority Sense Baseline===\n")
     file.write("Micro Precision: \t" + str(class_none_micro_precision) + "\n")
     file.write("Micro Recall: \t" + str(class_none_micro_recall) + "\n")
@@ -327,30 +339,39 @@ def train_network_analysis(train_batch_container, file_sentence_dict, config, su
     file.write("Macro Precision: \t" + str(class_none_macro_precision) + "\n")
     file.write("Macro Recall: \t" + str(class_none_macro_recall) + "\n")
     file.write("Macro F1: \t" + str(class_none_macro_f1_score) + "\n\n")
-
+    
     file.write("===Summary===\n\n")
-
+     
+    file.write("=Phrase Level=\n")
+    file.write("CLASS \tSF1 \tLF1\n")
+    for i in range(0, class_count-1):
+        file.write(str(config['CLASS_LIST'][i]) + ' \t' + 
+                       str(np.sum(strict_phrase_f1_micro_list[i,:])/len(phrase_matrix_list)) + ' \t' +
+                       str(np.sum(lenient_phrase_f1_micro_list[i,:])/len(phrase_matrix_list)) + '\n')
+    file.write("\n")
+    
+    file.write("=Token Level=\n")
+    
     file.write("=Macro=\n")
-    file.write("Macro F1 Total Average: \t" + str(sum(f1_macro_list)/buckets) + "\n")
+    file.write("Macro F1 Total Average: \t" + str(sum(f1_macro_list)/len(confusion_matrix_list)) + "\n")
     file.write("Macro F1 Minimum: \t" + str(min(f1_macro_list)) + "\n")
     file.write("Macro F1 Maximum: \t" + str(max(f1_macro_list)) + "\n\n")
-
-    file.write("=Sentence Level=\n")
-    file.write("CLASS \tSTRICT \tLENIENT \tMISS \tS% \tL%\n")
+    
+    file.write("=Micro=\n")
     for i in range(0, class_count):
-        file.write(str(config['CLASS_LIST'][i]) +
-                   " \t" + str(total_sentence_lenience[i, 0]) + " \t" + str(total_sentence_lenience[i, 1]) + " \t" + str(total_sentence_lenience[i, 2]) +
-                   str(total_sentence_lenience[i, 0]/np.sum(total_sentence_lenience[i, :])) + "\t" + str(np.sum(total_sentence_lenience[i, 0:2])/np.sum(total_sentence_lenience[i, :])) + "\n")
-    file.write("\n")
-
-    for i in range(0, class_count):
-        file.write("=" + str(config['CLASS_LIST'][i]) + "=\n")
-        file.write("Micro Precision Average: \t" + str(np.sum(precision_micro_list[i, :])/buckets) + "\n")
-        file.write("Micro Recall Average: \t" + str(np.sum(recall_micro_list[i, :])/buckets) + "\n")
-        file.write("Micro F1 Average: \t" + str(np.sum(f1_micro_list[i, :])/buckets) + "\n")
+        if not i:
+            file.write("=none=\n")
+        else:
+            file.write("=" + str(config['CLASS_LIST'][i-1]) + "=\n")
+            
+        file.write("Micro Precision Average: \t" + str(np.sum(precision_micro_list[i, :])/len(confusion_matrix_list)) + "\n")
+        file.write("Micro Recall Average: \t" + str(np.sum(recall_micro_list[i, :])/len(confusion_matrix_list)) + "\n")
+        file.write("Micro F1 Average: \t" + str(np.sum(f1_micro_list[i, :])/len(confusion_matrix_list)) + "\n")
         file.write("\n")
-
-    file.close()"""
+    file.write("\n")
+    
+    file.close()
+    
 
 def kfold_bucket_generator(batch_x, batch_y, seq_len, k):
     """
