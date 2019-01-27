@@ -1,0 +1,92 @@
+2019-01-26 02:12:53.426981
+
+===Majority Sense Baseline===
+Micro Precision: 	0.7814744475138121
+Micro Recall: 	1.0
+Micro F1: 	0.8773344446275065
+Macro Precision: 	0.19536861187845303
+Macro Recall: 	0.25
+Macro F1: 	0.21933361115687663
+
+===Summary===
+
+=Phrase Level=
+CLASS 	SF1 	LF1
+problem 	0.5866204261779785 	0.8378865242004394
+test 	0.6981646537780761 	0.8798713684082031
+treatment 	0.6594765663146973 	0.8677583694458008
+
+=Token Level=
+=Macro=
+Macro F1 Total Average: 	0.8705747127532959
+Macro F1 Minimum: 	0.8291622400283813
+Macro F1 Maximum: 	0.8974307775497437
+
+=Micro=
+=None=
+Micro Precision Average: 	0.9590853691101074
+Micro Recall Average: 	0.9748889923095703
+Micro F1 Average: 	0.9667763710021973
+
+=problem=
+Micro Precision Average: 	0.8674983978271484
+Micro Recall Average: 	0.8203699111938476
+Micro F1 Average: 	0.8402115821838378
+
+=test=
+Micro Precision Average: 	0.8646217346191406
+Micro Recall Average: 	0.8176916122436524
+Micro F1 Average: 	0.837497615814209
+
+=treatment=
+Micro Precision Average: 	0.8831252098083496
+Micro Recall Average: 	0.8005485534667969
+Micro F1 Average: 	0.8378132820129395
+
+
+2019-01-26 17:45:54.061850
+
+===Majority Sense Baseline===
+Micro Precision: 	0.7814744475138121
+Micro Recall: 	1.0
+Micro F1: 	0.8773344446275065
+Macro Precision: 	0.19536861187845303
+Macro Recall: 	0.25
+Macro F1: 	0.21933361115687663
+
+===Summary===
+
+=Phrase Level=
+CLASS 	SF1 	LF1
+problem 	0.5057989358901978 	0.7976804375648499
+test 	0.6704308986663818 	0.8315007090568542
+treatment 	0.568789005279541 	0.751061201095581
+
+=Token Level=
+=Macro=
+Macro F1 Total Average: 	0.844136655330658
+Macro F1 Minimum: 	0.844136655330658
+Macro F1 Maximum: 	0.844136655330658
+
+=Micro=
+=none=
+Micro Precision Average: 	0.965944766998291
+Micro Recall Average: 	0.9449881911277771
+Micro F1 Average: 	0.9553515315055847
+
+=problem=
+Micro Precision Average: 	0.829414427280426
+Micro Recall Average: 	0.8194732069969177
+Micro F1 Average: 	0.8244138360023499
+
+=test=
+Micro Precision Average: 	0.7875939607620239
+Micro Recall Average: 	0.8665977120399475
+Micro F1 Average: 	0.8252092003822327
+
+=treatment=
+Micro Precision Average: 	0.6925729513168335
+Micro Recall Average: 	0.8709139227867126
+Micro F1 Average: 	0.7715721130371094
+
+

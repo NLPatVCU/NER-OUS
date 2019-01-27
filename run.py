@@ -113,7 +113,7 @@ def main():
         if opt in ("-m","--mode"):
             mode = arg
         elif opt in ("-o","--output"):
-            outputDirectory = arg
+            output_directory = arg
         elif opt in ("-d","--model"):
             model_file = arg
         elif opt in ("-h","--help"):
@@ -130,10 +130,14 @@ def main():
         print("You must specify a model to use for evaluation using -d or --model.")
         return
         
-    #if outputDirectory == None:
-    #    print("You must specify a directory for output files with -o or --output.")
-    #    return
-        
+    elif mode == 'annotate':
+        if output_directory == None:
+            print("You must specify a directory for output files with -o or --output.")
+            return
+        elif model_file == None:
+            print("You must specify a model to use for evaluation using -d or --model.")
+            return        
+
     #Parse config file and set up configuration classes.
     config = build_config_file('config.ini')
 
@@ -143,6 +147,9 @@ def main():
     
     if config['CONFIGURATION']['USE_SEMANTIC_TYPES'] == '1':
         helpers.build_semantic_type_annotations(config)
+        
+    if output_directory:
+        config['CONFIGURATION']['OUTPUT_DIR'] = output_directory
         
     tx, ty, ts, tm = generate_embeddings(file_sentence_dict, config)
     train_batch_container = BatchContainer(tx, ty, ts, tm)
@@ -154,12 +161,10 @@ def main():
         #Build a model file for exporting.
         train_network_model(train_batch_container, config)
     elif mode == "eval":
-        evaluate_network_model(train_batch_container, config, model_file)
-    #elif mode == "annotate":
+        evaluate_network_model(train_batch_container, file_sentence_dict, config, model_file)
+    elif mode == "annotate":
+        annotate_network_model(train_batch_container, file_sentence_dict, config, model_file)
     
-        
-
-   
 def print_help():
     """
     Prints out the command line help information.
@@ -171,11 +176,26 @@ def print_help():
     
     return
 
-def evaluate_network_model(train_batch_container, config, model_file):
+def annotate_network_model(train_batch_container, file_sentence_dict, config, model_file):
     trainer = agent.Agent(config['NUM_FEATURES'], len(config['CLASS_LIST'])+1, int(config['CONFIGURATION']['MAX_SENTENCE_LENGTH']))
     trainer.load_model(model_file)
-    cm = trainer.eval_token_level(train_batch_container.bx, train_batch_container.by, train_batch_container.bs)
-    print(cm)    
+    
+    batch_x, batch_y, seq_len, batch_to_file_map = kfold_bucket_generator(train_batch_container.bx, train_batch_container.by, train_batch_container.bs, 1)
+    trainer.build_annotations(batch_x[0], seq_len[0], train_batch_container.mapping, batch_to_file_map, file_sentence_dict, config)
+    
+    write_annotations(file_sentence_dict, config['CONFIGURATION']['OUTPUT_DIR'])
+    
+def evaluate_network_model(train_batch_container, file_sentence_dict, config, model_file):
+    trainer = agent.Agent(config['NUM_FEATURES'], len(config['CLASS_LIST'])+1, int(config['CONFIGURATION']['MAX_SENTENCE_LENGTH']))
+    trainer.load_model(model_file)
+    
+    batch_x, batch_y, seq_len, batch_to_file_map = kfold_bucket_generator(train_batch_container.bx, train_batch_container.by, train_batch_container.bs, 1)
+    
+    cm = [trainer.eval_token_level(batch_x[0], batch_y[0], seq_len[0])]
+    pm = [trainer.eval_phrase_level(batch_x[0], seq_len[0], 0, train_batch_container.mapping, batch_to_file_map, file_sentence_dict, config)]
+
+    #Run analysis generation.
+    generate_analysis_file(cm, pm, config)
     
 def train_network_model(train_batch_container, config):
     """
@@ -794,6 +814,36 @@ def create_supplemental_sentence_structures(supp_file_path):
 
     #Return the dictionary
     return doc_dictionary
+
+def write_annotations(sentence_dict, output_location):
+    # cd into test file directory
+    cwd = os.getcwd()
+    
+    if not os.path.isdir(output_location):
+        os.mkdir(output_location)
+    os.chdir(output_location)    
+    
+    for k in sentence_dict.keys():
+        sentence_counter = 1
+        k_file = open(k + '.con', 'w')
+        
+        for v in sentence_dict[k]:
+            #Get the next annotation
+            start, end, tag = agent.get_annotation(v.modified_sentence_array, 0)
+            while not start == None:
+                #Build output string.
+                out_words = []
+                for i in range(start, end+1):
+                    out_words.append(v.original_sentence_array[i][0])
+                    
+                out_string = 'c="' + ' '.join(out_words) + '" ' + str(sentence_counter) + ':' + str(start) + ' ' + str(sentence_counter) + ':' + str(end) + '||t="' + tag + '"\n'
+                k_file.write(out_string)
+                
+                start, end, tag = agent.get_annotation(v.modified_sentence_array, end+1)
+            
+            sentence_counter += 1
+        
+    os.chdir(cwd)
 
 if __name__ == "__main__":
     main()

@@ -242,6 +242,29 @@ class Agent:
             debug_file.close()
             
         return phrase_matrix
+        
+    def build_annotations(self, batch_x, seq_len, file_map, batch_map, sentence_dict, config):
+        pred = self.sess.run(self.prediction, {self.input: batch_x, self.seq_len: seq_len, self.dropperc: 1.0})
+
+        #For each index in the prediction, rebuild sentence 
+        for i in range(0, len(pred)):
+            i_pred = pred[i, 0:seq_len[i], :]
+            i_pred_argmax = np.argmax(i_pred, -1)
+   
+            #Get the original file_map index.
+            batch_index = batch_map[0][i]
+            original_index = file_map[batch_index]
+            y = sentence_dict[original_index[0]][original_index[1]]
+
+            #Build sentence tags
+            y_ = build_sentence_tags(config, seq_len[i], i_pred_argmax)
+                
+            #Add Tags to Modified Sentence
+            for m, el in enumerate(y.modified_sentence_array):
+                el[1] = y_[m]
+                
+            #Rebuild Modified Sentence
+            y.rebuild_modified_sentence_array()
 
     def clean_up(self):
         """
