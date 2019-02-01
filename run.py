@@ -105,7 +105,7 @@ def main():
     """
     Main function of the application. Call -h or --help for command line inputs.
     """
-    mode, outputDirectory, modelFile = None, None, None
+    mode, output_directory, model_file = None, None, None
     
     #Process command line entries.
     opts, args = getopt.getopt(sys.argv[1:], 'm:i:o:d:a:h',["mode=","output=","model=","help"])
@@ -140,30 +140,44 @@ def main():
 
     #Parse config file and set up configuration classes.
     config = build_config_file('config.ini')
-
-    #Iterate files and generate feature vectors.
-    file_sentence_dict = create_annotated_sentence_structures(config['CONFIGURATION']['ANNOTATION_FILE_PATH'], config['CONFIGURATION']['RAW_FILE_PATH'])
-    add_modified_sentence_array(file_sentence_dict)
     
     if config['CONFIGURATION']['USE_SEMANTIC_TYPES'] == '1':
         helpers.build_semantic_type_annotations(config)
         
     if output_directory:
         config['CONFIGURATION']['OUTPUT_DIR'] = output_directory
+
+    if mode == "annotate":
+        file_sentence_dict, max_sentence_length = create_sentence_structures(config['CONFIGURATION']['RAW_FILE_PATH'])
+        add_modified_sentence_array(file_sentence_dict)
         
-    tx, ty, ts, tm = generate_embeddings(file_sentence_dict, config)
-    train_batch_container = BatchContainer(tx, ty, ts, tm)
-    
-    if mode == "analysis":
-        #Train the network with k-fold cross validation and report analysis.
-        train_network_analysis(train_batch_container, file_sentence_dict, config)
-    elif mode == "train":
-        #Build a model file for exporting.
-        train_network_model(train_batch_container, config)
-    elif mode == "eval":
-        evaluate_network_model(train_batch_container, file_sentence_dict, config, model_file)
-    elif mode == "annotate":
+        if max_sentence_length > int(config['CONFIGURATION']['MAX_SENTENCE_LENGTH']):
+            config['CONFIGURATION']['MAX_SENTENCE_LENGTH'] = str(max_sentence_length)
+        
+        tx, ty, ts, tm = generate_embeddings(file_sentence_dict, config)
+        train_batch_container = BatchContainer(tx, ty, ts, tm)
+        
         annotate_network_model(train_batch_container, file_sentence_dict, config, model_file)
+        
+    else:
+        #Iterate files and generate feature vectors.
+        file_sentence_dict, max_sentence_length = create_annotated_sentence_structures(config['CONFIGURATION']['ANNOTATION_FILE_PATH'], config['CONFIGURATION']['RAW_FILE_PATH'])
+        add_modified_sentence_array(file_sentence_dict)
+        
+        if max_sentence_length > int(config['CONFIGURATION']['MAX_SENTENCE_LENGTH']):
+            config['CONFIGURATION']['MAX_SENTENCE_LENGTH'] = str(max_sentence_length)
+            
+        tx, ty, ts, tm = generate_embeddings(file_sentence_dict, config)
+        train_batch_container = BatchContainer(tx, ty, ts, tm)
+        if mode == "analysis":
+            #Train the network with k-fold cross validation and report analysis.
+            train_network_analysis(train_batch_container, file_sentence_dict, config)
+        elif mode == "train":
+            #Build a model file for exporting.
+            train_network_model(train_batch_container, config)
+        elif mode == "eval":
+            evaluate_network_model(train_batch_container, file_sentence_dict, config, model_file)
+        
     
 def print_help():
     """
@@ -177,11 +191,13 @@ def print_help():
     return
 
 def annotate_network_model(train_batch_container, file_sentence_dict, config, model_file):
+    buckets = int(config['CONFIGURATION']['BUCKETS'])
     trainer = agent.Agent(config['NUM_FEATURES'], len(config['CLASS_LIST'])+1, int(config['CONFIGURATION']['MAX_SENTENCE_LENGTH']))
     trainer.load_model(model_file)
     
-    batch_x, batch_y, seq_len, batch_to_file_map = kfold_bucket_generator(train_batch_container.bx, train_batch_container.by, train_batch_container.bs, 1)
-    trainer.build_annotations(batch_x[0], seq_len[0], train_batch_container.mapping, batch_to_file_map, file_sentence_dict, config)
+    batch_x, batch_y, seq_len, batch_to_file_map = kfold_bucket_generator(train_batch_container.bx, train_batch_container.by, train_batch_container.bs, buckets)
+    for i in range(0, buckets):
+        trainer.build_annotations(batch_x[i], seq_len[i], train_batch_container.mapping, batch_to_file_map, file_sentence_dict, i, config)
     
     write_annotations(file_sentence_dict, config['CONFIGURATION']['OUTPUT_DIR'])
     
@@ -477,15 +493,15 @@ def generate_embeddings(file_sentence_dict, config):
             if "DEBUG" in config['CONFIGURATION']:
                 print(k_)
             embedding_list_file = []
-            f = open('./_arff/' + k_, 'w+')
+            #f = open('./_arff/' + k_, 'w+')
             sentence_counter = 0
 
             #Number of features
-            f.write(str(config['NUM_FEATURES']) + '\n')
+            #f.write(str(config['NUM_FEATURES']) + '\n')
 
             #x: list of sentences
             for x in file_sentence_dict[k_]:
-                f.write("START\n")
+                #f.write("START\n")
                 t_array = np.zeros((int(config['CONFIGURATION']['MAX_SENTENCE_LENGTH']), config['NUM_FEATURES']), dtype=np.float32)
                 c_array = np.zeros((int(config['CONFIGURATION']['MAX_SENTENCE_LENGTH'])), dtype=np.float32)
 
@@ -501,7 +517,7 @@ def generate_embeddings(file_sentence_dict, config):
                         t = p.stdout.readline()
 
                         if "UNDEF" in t:
-                            f.write(("0.0 " * int(config['CONFIGURATION']['EMBEDDING_SIZE'])) + str(class_) + "\n")
+                            #f.write(("0.0 " * int(config['CONFIGURATION']['EMBEDDING_SIZE'])) + str(class_) + "\n")
                             undefined.append(x.modified_sentence_array[z][0])
                             break
                         elif len(t) > 2:
@@ -510,7 +526,7 @@ def generate_embeddings(file_sentence_dict, config):
                             t_array[z][0:int(config['CONFIGURATION']['EMBEDDING_SIZE'])] = t_split[1:int(config['CONFIGURATION']['EMBEDDING_SIZE'])+1]
                             c_array[z] = class_
 
-                            f.write(t + " " + str(class_) + "\n")
+                            #f.write(t + " " + str(class_) + "\n")
                             break
                         else:
                             print(t)
@@ -532,12 +548,13 @@ def generate_embeddings(file_sentence_dict, config):
                 mapping.append([k_, sentence_counter])
                 sentence_counter += 1
 
-            f.close()
+            #f.close()
             
             #Add Semantic Embeddings
             if config['CONFIGURATION']['USE_SEMANTIC_TYPES'] == '1':
                 sem_loc = os.path.join(config['CONFIGURATION']['SEMANTIC_ANNOTATION_FILE_PATH'], k_ + '.st')
-                add_semantic_features(config, sem_loc, embedding_list_file)
+                if os.path.isfile(sem_loc):
+                    add_semantic_features(config, sem_loc, embedding_list_file)
 
             #Add Document Embeddings to List
             embedding_list.extend(embedding_list_file)
@@ -608,6 +625,7 @@ def create_sentence_structures(raw_file_path):
     """
     #Create a dictionary of documents
     doc_dictionary = {}
+    max_sentence_length = 0
 
     # cd into test file directory
     cwd = os.getcwd()
@@ -639,6 +657,9 @@ def create_sentence_structures(raw_file_path):
                 ss.modified_sentence = lower_sentence
                 #TODO(Jeff) Readd Preprocessed text.
                 #ss.modified_sentence = doc_text_processed_split[counter]
+                
+                if len(ss.original_sentence_array) > max_sentence_length:
+                    max_sentence_length = len(ss.original_sentence_array)
 
                 #Add SentenceStructure obj to the list
                 doc_sentence_structure_list.append(ss)
@@ -663,7 +684,7 @@ def create_sentence_structures(raw_file_path):
     os.chdir(cwd)
 
     #Return the dictionary
-    return doc_dictionary
+    return doc_dictionary, max_sentence_length
 
 def create_annotated_sentence_structures(ann_file_path, raw_file_path):
     """
@@ -677,7 +698,7 @@ def create_annotated_sentence_structures(ann_file_path, raw_file_path):
     ann_dict = create_annotation_dictionary(ann_file_path)
 
     #create sentence structure dictionary
-    ss_dict = create_sentence_structures(raw_file_path)
+    ss_dict, max_sentence_length = create_sentence_structures(raw_file_path)
 
     #Iterate over documents
     for key, value in ss_dict.items():
@@ -694,7 +715,7 @@ def create_annotated_sentence_structures(ann_file_path, raw_file_path):
             ss = annotate_sentence_structure(ss, annotations)
 
     #Return the updated ss_dict
-    return ss_dict
+    return ss_dict, max_sentence_length
 
 def annotate_sentence_structure(ss, annotations):
     """

@@ -243,7 +243,7 @@ class Agent:
             
         return phrase_matrix
         
-    def build_annotations(self, batch_x, seq_len, file_map, batch_map, sentence_dict, config):
+    def build_annotations(self, batch_x, seq_len, file_map, batch_map, sentence_dict, k, config):
         pred = self.sess.run(self.prediction, {self.input: batch_x, self.seq_len: seq_len, self.dropperc: 1.0})
 
         #For each index in the prediction, rebuild sentence 
@@ -252,7 +252,7 @@ class Agent:
             i_pred_argmax = np.argmax(i_pred, -1)
    
             #Get the original file_map index.
-            batch_index = batch_map[0][i]
+            batch_index = batch_map[k][i]
             original_index = file_map[batch_index]
             y = sentence_dict[original_index[0]][original_index[1]]
 
