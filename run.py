@@ -222,12 +222,17 @@ def train_network_model(train_batch_container, config):
     :return: Nothing.
     """
     epochs = int(config['CONFIGURATION']['EPOCHS'])
+    buckets = int(config['CONFIGURATION']['BUCKETS'])
     trainer = agent.Agent(config['NUM_FEATURES'], len(config['CLASS_LIST'])+1, int(config['CONFIGURATION']['MAX_SENTENCE_LENGTH']))
     
-    for k in range(0, epochs):
-        trainer.train(train_batch_container.bx, train_batch_container.by, train_batch_container.bs)
-        
-    trainer.save_model("./test_model.ckpt")    
+    batch_x, batch_y, seq_len, batch_to_file_map = kfold_bucket_generator(train_batch_container.bx, train_batch_container.by, train_batch_container.bs, buckets)
+    for k in range(0,epochs):
+        loss = 0
+        for i in range(0, buckets):
+            loss += trainer.train(batch_x[i], batch_y[i], seq_len[i])
+        print("Loss for Epoch " + str(k) + " is " + str(loss) + ".")
+  
+    trainer.save_model("./mimic_model/model.ckpt")    
 
 def train_network_analysis(train_batch_container, file_sentence_dict, config, supplemental_batch=None):
     """
