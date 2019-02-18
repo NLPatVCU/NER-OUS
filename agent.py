@@ -119,6 +119,25 @@ class Agent:
                 confusion_matrix[pred_class, truth_class] += 1
 
         return confusion_matrix
+        
+    def eval_token_level_from_dict(self, sentence_dict, config):
+        confusion_matrix = np.zeros((self.num_classes, self.num_classes), dtype=np.int32)
+        
+        for file in sentence_dict.keys():
+            for sentence in sentence_dict[file]:
+                for i in range(0, len(sentence.original_sentence_array)):
+                    truth_class = 0
+                    pred_class = 0
+                    
+                    if sentence.original_sentence_array[i][1]:
+                        truth_class = config['CLASS_MAP'][sentence.original_sentence_array[i][1]]
+                    if sentence.modified_sentence_array[i][1]:
+                        pred_class = config['CLASS_MAP'][sentence.modified_sentence_array[i][1]]
+                        
+                    confusion_matrix[pred_class, truth_class] += 1
+                    
+        return confusion_matrix
+            
 
     def eval_phrase_level(self, batch_x, seq_len, k, file_map, batch_map, sentence_dict, config):
         """

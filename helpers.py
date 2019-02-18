@@ -66,9 +66,13 @@ def build_metamap_semantic_dictionary(medacy_metamap_component, in_file_path):
     """
     metamap_dict = medacy_metamap_component.map_file(in_file_path)
     metamap_terms = medacy_metamap_component.extract_mapped_terms(metamap_dict)
-    metamap_annotations = medacy_metamap_component.mapped_terms_to_spacy_ann(metamap_terms)
+    if metamap_terms:
+        metamap_annotations = medacy_metamap_component.mapped_terms_to_spacy_ann(metamap_terms)
+        return metamap_annotations
+    else:
+        return None
     
-    return metamap_annotations
+    
 
 def build_word_dictionary(in_file):
     """
@@ -84,9 +88,10 @@ def build_word_dictionary(in_file):
     word_counter = 0
 
     #For each line, extract the words and their start locations.
-    line = in_file.readline().rstrip('\r\n')
+    line = in_file.readline()
 
     while line:
+        line = line.rstrip('\r\n')
         #Find all locations of whitespace.
         spaces = [m.start() for m in re.finditer(' ', line)]
         
@@ -156,6 +161,9 @@ def build_single_semantic_type_annotations(config, in_file_path, medacy_metamap_
     if not medacy_metamap_component:
         medacy_metamap_component = MetaMap(metamap_path=config['CONFIGURATION']['METAMAP_PATH'])
     metamap_annotations = build_metamap_semantic_dictionary(medacy_metamap_component, in_file_path)
+    
+    if not metamap_annotations:
+        return None
 
     in_file = open(in_file_path, 'r')
     index_dict = build_word_dictionary(in_file)
@@ -182,7 +190,11 @@ def build_single_semantic_type_annotations(config, in_file_path, medacy_metamap_
                     if start_index >= len(key_list):
                         break
             except ValueError:
-                print("Found a non-existant index. Continuing.")
+                if "DEBUG" in config['CONFIGURATION']:
+                    print("Found a non-existant index. Continuing.")
+                    print("File: " + str(in_file_path))
+                    print("Start index: " + str(v[0]))
+                    print("End index: " + str(v[1]))
     return index_dict
     
     
@@ -208,7 +220,8 @@ def build_semantic_type_annotations(config):
         out_file_path = os.path.join(cwd, output_directory, stripped_filename(document) + ".st")
         if not os.path.exists(out_file_path) or config['CONFIGURATION']['OVERRIDE_SEMANTIC_ANNOTATIONS'] == "1":
             index_dict = build_single_semantic_type_annotations(config, document, medacy_metamap_component)
-            write_semantic_annotations_to_file(index_dict, out_file_path)
+            if index_dict:
+                write_semantic_annotations_to_file(index_dict, out_file_path)
 
     #Return to original path
     os.chdir(cwd)
