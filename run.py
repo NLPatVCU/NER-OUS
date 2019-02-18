@@ -234,11 +234,7 @@ def train_network_model(train_batch_container, config):
             loss += trainer.train(batch_x[i], batch_y[i], seq_len[i])
         print("Loss for Epoch " + str(k) + " is " + str(loss) + ".")
   
-<<<<<<< HEAD
-    trainer.save_model("./test_model.ckpt")    
-=======
     trainer.save_model("./mimic_model/model.ckpt")    
->>>>>>> 4408cef52680ae7013353ffec9d24d74ca6f4257
 
 def train_network_analysis(train_batch_container, file_sentence_dict, config, supplemental_batch=None):
     """
