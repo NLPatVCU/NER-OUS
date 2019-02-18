@@ -5,8 +5,10 @@ Authors: Jeffrey Smith, Bill Cramer, Evan French
 """
 import re
 from copy import copy
+import spacy
 
 strip_map = set([':', ';', ',', '.', '[', '(', ']', ')', '-', '?', '&quot;', '&apos;', '&apos;s', '/', '#', '=', '+', '*', '%'])
+nlp = spacy.load('en_core_web_sm')
 
 #TODO(Jeff) Replace with preprocessing later.
 def process_token(token):
@@ -68,6 +70,13 @@ class SentenceStructure:
     def rebuild_modified_sentence_array_tags(self):
         #Modifiy special characters
         m = 0
+        dep = []
+        head = []
+        doc = nlp(self.original_sentence)
+        for token in doc:
+            dep.append(token.dep_)
+            head.append(token.head.text)            
+        
         while m < len(self.modified_sentence_array):
             #Check if the character in this position is a special character. If so, process
             if self.modified_sentence_array[m][0] == ',':
@@ -91,6 +100,16 @@ class SentenceStructure:
                 if quot_loc > -1:
                     self.modified_sentence_array[m][1] = self.modified_sentence_array[m+1][1]
                     self.modified_sentence_array[quot_loc][1] = self.modified_sentence_array[m+1][1]
+                    
+            #elif self.modified_sentence_array[m][0] == 'a' or self.modified_sentence_array[m][0] == 'an' or self.modified_sentence_array[m][0] == 'his' or self.modified_sentence_array[m][0] == 'her' or self.modified_sentence_array[m][0] == 'the' or self.modified_sentence_array[m][0] == 'this':
+                #if m+1 < len(self.modified_sentence_array):
+                    #self.modified_sentence_array[m][1] = self.modified_sentence_array[m+1][1]
+                    
+            #elif dep[m] == 'cc' or dep[m] == 'det' or dep[m] == 'nummod' or dep[m] == 'poss' or dep[m] == 'prep':
+             #   for x in range(0, len(self.original_sentence_array)):
+              #      if self.original_sentence_array[x][0] == head[m]:
+               #         self.modified_sentence_array[m][1] = self.modified_sentence_array[x][1]
+                #        break
                     
             m += 1
 

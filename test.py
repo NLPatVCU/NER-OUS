@@ -10,6 +10,7 @@ import os
 import classes
 import run
 import agent
+from preprocess import preprocess
 
 class AgentTestClass(unittest.TestCase):
     def test_build_sentence_tags(self):
@@ -155,7 +156,7 @@ class TestSentenceStructures(unittest.TestCase):
         f.write("test")
         f.close()
 
-        result = run.create_sentence_structures('.')
+        result, _ = run.create_sentence_structures('.')
         result_1 = result['test_doc_1']
         result_2 = result['test_doc_2']
 
@@ -243,8 +244,7 @@ class TestSentenceStructures(unittest.TestCase):
         os.remove(ann_file_path + '/test.con')
         os.rmdir(raw_file_path)
         os.rmdir(ann_file_path)
-
-"""        
+   
 #Author: Jeffrey Smith
 class TestPreprocessing(unittest.TestCase):
     #TODO(Jeff) Revamp this when preprocessing library is redone. 
@@ -257,10 +257,15 @@ class TestPreprocessing(unittest.TestCase):
         test_list.append(classes.SentenceStructure("Dr. Pump 3/25/05 1:30 ,"))
         test_list.append(classes.SentenceStructure("1. TIKWELD , WILLAIDE V. , M.D. ( QT296 ) 03/19/06 10:53 AM"))
         
+        test_list[0].modified_sentence = preprocess(test_list[0].original_sentence).lower()
         test_list[0].generate_modified_sentence_array()
+        test_list[1].modified_sentence = preprocess(test_list[1].original_sentence).lower()
         test_list[1].generate_modified_sentence_array()
+        test_list[2].modified_sentence = preprocess(test_list[2].original_sentence).lower()
         test_list[2].generate_modified_sentence_array()
+        test_list[3].modified_sentence = preprocess(test_list[3].original_sentence).lower()
         test_list[3].generate_modified_sentence_array()
+        test_list[4].modified_sentence = preprocess(test_list[4].original_sentence).lower()
         test_list[4].generate_modified_sentence_array()
         
         test_dict["0"] = test_list
@@ -312,7 +317,6 @@ class TestPreprocessing(unittest.TestCase):
         self.assertEqual(test_dict["0"][4].modified_sentence_array[9][0], "date")
         self.assertEqual(test_dict["0"][4].modified_sentence_array[10][0], "date")
         self.assertEqual(test_dict["0"][4].modified_sentence_array[11][0], "am")
-"""
     
 if __name__ == '__main__':
     unittest.main()
