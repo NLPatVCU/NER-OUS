@@ -210,8 +210,10 @@ def evaluate_network_model(train_batch_container, file_sentence_dict, config, mo
     cm = [trainer.eval_token_level(batch_x[0], batch_y[0], seq_len[0])]
     pm = [trainer.eval_phrase_level(batch_x[0], seq_len[0], 0, train_batch_container.mapping, batch_to_file_map, file_sentence_dict, config)]
 
+    post_correction_confusion_matrix = trainer.eval_token_level_from_dict(file_sentence_dict, config)
+    
     #Run analysis generation.
-    generate_analysis_file(cm, pm, config)
+    generate_analysis_file(cm, post_correction_confusion_matrix, pm, config)
     
 def train_network_model(train_batch_container, config):
     """
@@ -222,12 +224,17 @@ def train_network_model(train_batch_container, config):
     :return: Nothing.
     """
     epochs = int(config['CONFIGURATION']['EPOCHS'])
+    buckets = int(config['CONFIGURATION']['BUCKETS'])
     trainer = agent.Agent(config['NUM_FEATURES'], len(config['CLASS_LIST'])+1, int(config['CONFIGURATION']['MAX_SENTENCE_LENGTH']))
     
-    for k in range(0, epochs):
-        trainer.train(train_batch_container.bx, train_batch_container.by, train_batch_container.bs)
-        
-    trainer.save_model("./test_model.ckpt")    
+    batch_x, batch_y, seq_len, batch_to_file_map = kfold_bucket_generator(train_batch_container.bx, train_batch_container.by, train_batch_container.bs, buckets)
+    for k in range(0,epochs):
+        loss = 0
+        for i in range(0, buckets):
+            loss += trainer.train(batch_x[i], batch_y[i], seq_len[i])
+        print("Loss for Epoch " + str(k) + " is " + str(loss) + ".")
+  
+    trainer.save_model("./mimic_model/model.ckpt")    
 
 def train_network_analysis(train_batch_container, file_sentence_dict, config, supplemental_batch=None):
     """
@@ -250,8 +257,9 @@ def train_network_analysis(train_batch_container, file_sentence_dict, config, su
         sup_batch_x, sup_batch_y, sup_seq_len, _ = kfold_bucket_generator(supplemental_batch.bx, supplemental_batch.by, supplemental_batch.bs, epochs)
 
     #Create and train the model for kFoldCrossValidation
-    confusion_matrix_list = []
+    pre_correction_confusion_matrix_list = []
     phrase_matrix_list = []
+    post_correction_confusion_matrix = None
     
     if buckets > 1:
         for k in range(0, buckets):
@@ -277,7 +285,7 @@ def train_network_analysis(train_batch_container, file_sentence_dict, config, su
 
             #Evaluate after training and store debugging files.
             cm = trainer.eval_token_level(batch_x[k], batch_y[k], seq_len[k])
-            confusion_matrix_list.append(cm)
+            pre_correction_confusion_matrix_list.append(cm)
 
             file = open("./outCF", 'a')
             outstr = np.array2string(cm)
@@ -308,15 +316,17 @@ def train_network_analysis(train_batch_container, file_sentence_dict, config, su
             print("Loss for Epoch " + str(j) + " is " + str(loss) + ".")
         
 
-    #Run analysis generation.
-    generate_analysis_file(confusion_matrix_list, phrase_matrix_list, config)
+    post_correction_confusion_matrix = agent.eval_token_level_from_dict(file_sentence_dict, config)
     
-def generate_analysis_file(confusion_matrix_list, phrase_matrix_list, config):
+    #Run analysis generation.
+    generate_analysis_file(pre_correction_confusion_matrix_list, post_correction_confusion_matrix, phrase_matrix_list, config)
+    
+def generate_analysis_file(pre_correction_confusion_matrix_list, post_correction_confusion_matrix, phrase_matrix_list, config):
     class_count = len(config['CLASS_LIST'])+1
     
     #Start with Majority Sense Baseline
     majority_sense_data = np.zeros((1, class_count), dtype=np.int32)
-    for i in confusion_matrix_list:
+    for i in pre_correction_confusion_matrix_list:
         for j in range(0, class_count):
             for k in range(0, class_count):
                 majority_sense_data[0, k] += i[j, k]   
@@ -330,15 +340,18 @@ def generate_analysis_file(confusion_matrix_list, phrase_matrix_list, config):
     class_none_macro_f1_score = class_none_micro_f1_score/class_count   
 
     #Token Level Analysis
-    precision_micro_list = np.zeros((class_count, len(confusion_matrix_list)), dtype=np.float32)
-    recall_micro_list = np.zeros((class_count, len(confusion_matrix_list)), dtype=np.float32)
-    f1_micro_list = np.zeros((class_count, len(confusion_matrix_list)), dtype=np.float32)
+    pre_correction_confusion_matrix = np.zeros((class_count, class_count), dtype=np.int32)
+    precision_micro_list = np.zeros((class_count, len(pre_correction_confusion_matrix_list)), dtype=np.float32)
+    recall_micro_list = np.zeros((class_count, len(pre_correction_confusion_matrix_list)), dtype=np.float32)
+    f1_micro_list = np.zeros((class_count, len(pre_correction_confusion_matrix_list)), dtype=np.float32)
     precision_macro_list = []
     recall_macro_list = []
     f1_macro_list = []    
     
-    for i, cm in enumerate(confusion_matrix_list):
+    for i, cm in enumerate(pre_correction_confusion_matrix_list):
         for j in range(0, class_count):
+            for k in range(0, class_count):
+                pre_correction_confusion_matrix[j, k] += cm[j, k]
             precision_micro_list[j, i] = 1.0 * cm[j, j] / np.sum(cm[j, :])
             recall_micro_list[j, i] = 1.0 * cm[j, j] / np.sum(cm[:, j])
             f1_micro_list[j, i] = 2.0 * ((precision_micro_list[j, i] * recall_micro_list[j, i]) / (precision_micro_list[j, i] + recall_micro_list[j, i]))
@@ -346,6 +359,11 @@ def generate_analysis_file(confusion_matrix_list, phrase_matrix_list, config):
         precision_macro_list.append((np.sum(precision_micro_list[:, i])/class_count))
         recall_macro_list.append((np.sum(recall_micro_list[:, i])/class_count))
         f1_macro_list.append((np.sum(f1_micro_list[:, i])/class_count))
+        
+    correction_difference_confusion_matrix = np.zeros((class_count, class_count), dtype=np.int32)
+    for j in range(0, class_count):
+        for k in range(0, class_count):
+            correction_difference_confusion_matrix[j, k] = post_correction_confusion_matrix[j, k] - pre_correction_confusion_matrix[j, k]
         
     #Phrase Level Analysis
     strict_phrase_precision_micro_list = np.zeros((class_count-1, len(phrase_matrix_list)), dtype=np.float32)
@@ -389,7 +407,7 @@ def generate_analysis_file(confusion_matrix_list, phrase_matrix_list, config):
     file.write("=Token Level=\n")
     
     file.write("=Macro=\n")
-    file.write("Macro F1 Total Average: \t" + str(sum(f1_macro_list)/len(confusion_matrix_list)) + "\n")
+    file.write("Macro F1 Total Average: \t" + str(sum(f1_macro_list)/len(pre_correction_confusion_matrix_list)) + "\n")
     file.write("Macro F1 Minimum: \t" + str(min(f1_macro_list)) + "\n")
     file.write("Macro F1 Maximum: \t" + str(max(f1_macro_list)) + "\n\n")
     
@@ -400,14 +418,18 @@ def generate_analysis_file(confusion_matrix_list, phrase_matrix_list, config):
         else:
             file.write("=" + str(config['CLASS_LIST'][i-1]) + "=\n")
             
-        file.write("Micro Precision Average: \t" + str(np.sum(precision_micro_list[i, :])/len(confusion_matrix_list)) + "\n")
-        file.write("Micro Recall Average: \t" + str(np.sum(recall_micro_list[i, :])/len(confusion_matrix_list)) + "\n")
-        file.write("Micro F1 Average: \t" + str(np.sum(f1_micro_list[i, :])/len(confusion_matrix_list)) + "\n")
+        file.write("Micro Precision Average: \t" + str(np.sum(precision_micro_list[i, :])/len(pre_correction_confusion_matrix_list)) + "\n")
+        file.write("Micro Recall Average: \t" + str(np.sum(recall_micro_list[i, :])/len(pre_correction_confusion_matrix_list)) + "\n")
+        file.write("Micro F1 Average: \t" + str(np.sum(f1_micro_list[i, :])/len(pre_correction_confusion_matrix_list)) + "\n")
         file.write("\n")
     file.write("\n")
     
+    file.write("=Confusion Matrix Difference=\n")
+    for j in range(0, class_count):
+        for k in range(0, class_count):
+            file.write(str(correction_difference_confusion_matrix[j, k]) + ' ')
+        file.write('\n')
     file.close()
-    
 
 def kfold_bucket_generator(batch_x, batch_y, seq_len, k):
     """

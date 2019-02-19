@@ -190,7 +190,11 @@ def build_single_semantic_type_annotations(config, in_file_path, medacy_metamap_
                     if start_index >= len(key_list):
                         break
             except ValueError:
-                print("Found a non-existant index. Continuing.")
+                if "DEBUG" in config['CONFIGURATION']:
+                    print("Found a non-existant index. Continuing.")
+                    print("File: " + str(in_file_path))
+                    print("Start index: " + str(v[0]))
+                    print("End index: " + str(v[1]))
     return index_dict
     
     
