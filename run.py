@@ -9,7 +9,7 @@ import datetime
 from random import sample
 
 import numpy as np
-
+import gensim.models as gp
 import agent
 import helpers
 from classes import SentenceStructure, Annotation, BatchContainer
@@ -154,7 +154,7 @@ def main():
         if max_sentence_length > int(config['CONFIGURATION']['MAX_SENTENCE_LENGTH']):
             config['CONFIGURATION']['MAX_SENTENCE_LENGTH'] = str(max_sentence_length)
         
-        tx, ty, ts, tm = generate_embeddings(file_sentence_dict, config)
+        tx, ty, ts, tm = generate_feature_vector(file_sentence_dict, config)
         train_batch_container = BatchContainer(tx, ty, ts, tm)
         
         annotate_network_model(train_batch_container, file_sentence_dict, config, model_file)
@@ -167,7 +167,7 @@ def main():
         if max_sentence_length > int(config['CONFIGURATION']['MAX_SENTENCE_LENGTH']):
             config['CONFIGURATION']['MAX_SENTENCE_LENGTH'] = str(max_sentence_length)
             
-        tx, ty, ts, tm = generate_embeddings(file_sentence_dict, config)
+        tx, ty, ts, tm = generate_feature_vector(file_sentence_dict, config)
         train_batch_container = BatchContainer(tx, ty, ts, tm)
         if mode == "analysis":
             #Train the network with k-fold cross validation and report analysis.
@@ -316,7 +316,7 @@ def train_network_analysis(train_batch_container, file_sentence_dict, config, su
             print("Loss for Epoch " + str(j) + " is " + str(loss) + ".")
         
 
-    post_correction_confusion_matrix = agent.eval_token_level_from_dict(file_sentence_dict, config)
+    post_correction_confusion_matrix = trainer.eval_token_level_from_dict(file_sentence_dict, config)
     
     #Run analysis generation.
     generate_analysis_file(pre_correction_confusion_matrix_list, post_correction_confusion_matrix, phrase_matrix_list, config)
@@ -466,132 +466,84 @@ def kfold_bucket_generator(batch_x, batch_y, seq_len, k):
 
     return nbatch_x, nbatch_y, nseq_len, batch_to_file_mapping
 
-def generate_embeddings(file_sentence_dict, config):
+def generate_feature_vector(file_sentence_dict, config):
     """
-    Generates embeddings vectors for all included sentences.
+    Generates feature vectors for all included sentences.
 
-    :param file_sentence_dict: A map containing SentenceStructures to generate embeddings for.
+    :param file_sentence_dict: A map containing SentenceStructures to generate vectors for.
     :param config: A configuration file from configparser.
-    :return: A list of embeddings representing X, list of classes Y, list of sequences, vector->file mapping
+    :return: A list of vector representing X, list of classes Y, list of sequence lengths, vector->file mapping
     """
-    if not os.path.isdir('./_arff'):
-        os.mkdir('_arff')
+    w2v = gp.keyedvectors.Word2VecKeyedVectors.load_word2vec_format(config['CONFIGURATION']['EMBEDDING_FILE'], binary=False)
 
-    #Launch perl pipe
-    args = ['perl', './w2v.pl', config['CONFIGURATION']['EMBEDDING_FILE']]
-    p = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, universal_newlines=True)
-    outs, errs = [], []
-
-    #Wait until perl is done loading file.
-    loaded = False
-    while not p.poll():
-        t = p.stdout.readline()
-        if "READY" in t:
-            loaded = True
-            break
-        elif "FAILED" in t:
-            break
-        elif "EXIT" in t:
-            break
-
-    if not loaded:
-        print("Perl module did not load correctly. Dying.")
-        sys.exit(-1)
-
-    print("Perl loaded correctly.")
-
-    #Generate embedding file for each thingy.
-    embedding_list = []
+    #Each token and sentence needs vectors, truth class, sequence length, and a mapping tying the vector back to the sentence.
+    vector_list = []
     class_list = []
     seq_list = []
-    mapping = [] #A map to tie things back together.
+    mapping = []
+    if "DEBUG" in config['CONFIGURATION']:
+        undefined = []
 
-    undefined = []
-
+    #Iterate over all the files.
     try:
         k = file_sentence_dict.keys()
         for k_ in k:
-            #Debug
             if "DEBUG" in config['CONFIGURATION']:
                 print(k_)
-            embedding_list_file = []
-            #f = open('./_arff/' + k_, 'w+')
-            sentence_counter = 0
 
-            #Number of features
-            #f.write(str(config['NUM_FEATURES']) + '\n')
+            vector_list_file = []
+            sentence_counter = 0
 
             #x: list of sentences
             for x in file_sentence_dict[k_]:
-                #f.write("START\n")
-                t_array = np.zeros((int(config['CONFIGURATION']['MAX_SENTENCE_LENGTH']), config['NUM_FEATURES']), dtype=np.float32)
-                c_array = np.zeros((int(config['CONFIGURATION']['MAX_SENTENCE_LENGTH'])), dtype=np.float32)
+                vector_array = np.zeros((int(config['CONFIGURATION']['MAX_SENTENCE_LENGTH']), config['NUM_FEATURES']), dtype=np.float32)
+                class_array = np.zeros((int(config['CONFIGURATION']['MAX_SENTENCE_LENGTH'])), dtype=np.float32)
 
                 for z in range(0, len(x.modified_sentence_array)):
-                    p.stdin.write(x.modified_sentence_array[z][0] + "\n")
-                    p.stdin.flush()
+                    #Write Word Vector
+                    try:
+                        vec = w2v.get_vector(x.modified_sentence_array[z][0])
+                        vector_array[z][0:int(config['CONFIGURATION']['EMBEDDING_SIZE'])] = vec[:]
+                    except:
+                        if "DEBUG" in config['CONFIGURATION']:
+                            undefined.append(x.modified_sentence_array[z][0])
 
+                    #Write Class
                     class_ = 0
                     if x.original_sentence_array[x.modified_sentence_array[z][2]][1] in config['CLASS_MAP']:
                         class_ = config['CLASS_MAP'][x.original_sentence_array[z][1]]
+                    class_array[z] = class_
 
-                    while not p.poll():
-                        t = p.stdout.readline()
-
-                        if "UNDEF" in t:
-                            #f.write(("0.0 " * int(config['CONFIGURATION']['EMBEDDING_SIZE'])) + str(class_) + "\n")
-                            undefined.append(x.modified_sentence_array[z][0])
-                            break
-                        elif len(t) > 2:
-                            #Temp Generate Embeddings
-                            t_split = t.split()
-                            t_array[z][0:int(config['CONFIGURATION']['EMBEDDING_SIZE'])] = t_split[1:int(config['CONFIGURATION']['EMBEDDING_SIZE'])+1]
-                            c_array[z] = class_
-
-                            #f.write(t + " " + str(class_) + "\n")
-                            break
-                        else:
-                            print(t)
-
-                    #Generate Extra Features
+                    #Write Extra Features
                     if x.modified_sentence_array[z][0] == "__num__":
-                        t_array[z][int(config['CONFIGURATION']['EMBEDDING_SIZE']) + config['FEATURE_MAP']["IS_NUM"]] = 1.0
+                        vector_array[z][int(config['CONFIGURATION']['EMBEDDING_SIZE']) + config['FEATURE_MAP']["IS_NUM"]] = 1.0
                     elif x.modified_sentence_array[z][0] == "__date__":
-                        t_array[z][int(config['CONFIGURATION']['EMBEDDING_SIZE']) + config['FEATURE_MAP']["IS_DATE"]] = 1.0
+                        vector_array[z][int(config['CONFIGURATION']['EMBEDDING_SIZE']) + config['FEATURE_MAP']["IS_DATE"]] = 1.0
                     elif x.modified_sentence_array[z][0] == "__time__":
-                        t_array[z][int(config['CONFIGURATION']['EMBEDDING_SIZE']) + config['FEATURE_MAP']["IS_TIME"]] = 1.0
+                        vector_array[z][int(config['CONFIGURATION']['EMBEDDING_SIZE']) + config['FEATURE_MAP']["IS_TIME"]] = 1.0        
 
-                #Add embeddings to our arrays.
-                embedding_list_file.append(t_array)
-                class_list.append(c_array)
-                seq_list.append(len(x.modified_sentence_array))
+                #Add vectors to our lists.
+                vector_list_file.append(vector_array)
+                class_list.append(class_array)
+                seq_list.append(len(x.modified_sentence_array)) 
 
                 #Add this index back to the mapping.
                 mapping.append([k_, sentence_counter])
                 sentence_counter += 1
 
-            #f.close()
-            
-            #Add Semantic Embeddings
+            #Add Semantic Vectors
             if config['CONFIGURATION']['USE_SEMANTIC_TYPES'] == '1':
                 sem_loc = os.path.join(config['CONFIGURATION']['SEMANTIC_ANNOTATION_FILE_PATH'], k_ + '.st')
                 if os.path.isfile(sem_loc):
-                    add_semantic_features(config, sem_loc, embedding_list_file)
+                    add_semantic_features(config, sem_loc, vector_list_file)
 
             #Add Document Embeddings to List
-            embedding_list.extend(embedding_list_file)
-            
+            vector_list.extend(vector_list_file)
+
+
     except Exception as e:
         print("Failed to properly generate word embeddings. Dying.")
-        print(repr(e))
-        p.terminate()
-        sys.exit(-1)
-
-    finally:
-        p.stdin.write("EXIT\n")
-        p.stdin.flush()
-
-    p.terminate()
+        sys.exit(-1)    
 
     #Debug
     #Write words to file that were undefined in embedding list.
@@ -600,9 +552,9 @@ def generate_embeddings(file_sentence_dict, config):
         for x in undefined:
             xF.write(x)
             xF.write("\n")
-        xF.close()
+        xF.close()     
 
-    return embedding_list, class_list, seq_list, mapping
+    return vector_list, class_list, seq_list, mapping
 
 def add_modified_sentence_array(file_sentence_dict):
     """
@@ -660,14 +612,18 @@ def create_sentence_structures(raw_file_path):
         doc_sentence_structure_list = []
 
         #Open the document
-        doc = open(document, "r")
+        """doc = open(document, "r")
 
         doc_text = doc.read()
+        doc_split_pre = doc_text.splitlines()
         doc_text_processed = preprocess(doc_text)
         doc_text_processed_split = doc_text_processed.splitlines()
 
         doc.close()
-
+        
+        if not len(doc_split_pre) == len(doc_text_processed_split):
+            print('Err: ' + str(document))
+        """
         doc = open(document, "r")
         try:
             #Iterate over sentences in the document
@@ -691,7 +647,7 @@ def create_sentence_structures(raw_file_path):
             print("ERR. " + str(document))
             sys.exit(0)
 
-        assert(len(doc_sentence_structure_list) == len(doc_text_processed_split)), "Assertion Failed, array lengths don't match. " + str(len(doc_sentence_structure_list)) + " " + str(len(doc_text_processed_split))
+        #assert(len(doc_sentence_structure_list) == len(doc_text_processed_split)), "Assertion Failed, array lengths don't match. " + str(len(doc_sentence_structure_list)) + " " + str(len(doc_text_processed_split))
 
         #Strip the extension from the file to get the document name
         doc_name = os.path.splitext(document)[0]

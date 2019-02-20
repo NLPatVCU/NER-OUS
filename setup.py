@@ -26,7 +26,8 @@ setup(
         'shutil',
         'spacy==2.0.13',
         'scikit-learn>=0.20.0',
-        'numpy'
+        'numpy',
+        'gensim'
     ],
     include_package_data=True,
     zip_safe=False
