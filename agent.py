@@ -119,6 +119,25 @@ class Agent:
                 confusion_matrix[pred_class, truth_class] += 1
 
         return confusion_matrix
+        
+    def eval_token_level_from_dict(self, sentence_dict, config):
+        confusion_matrix = np.zeros((self.num_classes, self.num_classes), dtype=np.int32)
+        
+        for file in sentence_dict.keys():
+            for sentence in sentence_dict[file]:
+                for i in range(0, len(sentence.original_sentence_array)):
+                    truth_class = 0
+                    pred_class = 0
+                    
+                    if sentence.original_sentence_array[i][1]:
+                        truth_class = config['CLASS_MAP'][sentence.original_sentence_array[i][1]]
+                    if sentence.modified_sentence_array[i][1]:
+                        pred_class = config['CLASS_MAP'][sentence.modified_sentence_array[i][1]]
+                        
+                    confusion_matrix[pred_class, truth_class] += 1
+                    
+        return confusion_matrix
+            
 
     def eval_phrase_level(self, batch_x, seq_len, k, file_map, batch_map, sentence_dict, config):
         """
@@ -172,14 +191,14 @@ class Agent:
                             #CORRECT
                             phrase_matrix[config['CLASS_MAP'][truth_class]][0] += 1
                             
-                            """
+                            
                             #Debug
                             if "DEBUG" in config['CONFIGURATION']:
                                 start_ = min(truth_start, pred_start)
                                 end_ = max(truth_end, pred_end)
                                 
                                 write_phrase_debug_line(debug_file, start_, end_, y, "COR", truth_start, truth_end, pred_start, pred_end)
-                            """
+                            
                             
                             truth_start, truth_end, truth_class = get_annotation(y.original_sentence_array, truth_end+1)
                             pred_start, pred_end, pred_class = get_annotation(y.modified_sentence_array, pred_end+1)
@@ -341,16 +360,3 @@ def write_phrase_debug_line(debug_file, start, end, ss, type, x1, x2, y1, y2):
     else:
         debug_file.write("Tag: none\n")
     debug_file.write('Ranges: ' + str(x1) + ',' + str(x2) + ';' + str(y1) + ',' + str(y2) + '\n\n')
-    
-    """
-    out_text_ = "Text: "
-    out_truth_ = "Truth: "
-    out_pred_ = "Pred: "  
-    for o in range(start, end+1):
-        out_text_ += ss.original_sentence_array[o][0] + " "
-        out_truth_ += ss.original_sentence_array[o][1] + " "
-        out_pred_ += ss.modified_sentence_array[o][1] + " "
-        
-    debug_file.write(out_text_ + "\n")
-    debug_file.write(out_truth_ + "\n")
-    debug_file.write(out_pred_ + "\n\n")"""
