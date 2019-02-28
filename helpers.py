@@ -7,44 +7,58 @@ from medacy.pipeline_components.metamap.metamap import MetaMap
 #Constant Lists
 #MetaMap semantic types corresponding to medical problems
 problem_list = [
-'amph', #Amphibian
-'famg', #Family Group
-'ffas', #Fully Formed Anatomical Structure
-'orgm', #Organism
-'humn', #Human
-'rnlw', #Regulation or Law
-'nusq', #Nucleotide Sequence
-'eehu', #Environmental Effect of Humans
-'sosy', #Sign or Symptom
-'patf', #Pathologic Function
-'dsyn', #Disease or Syndrome
-'inpo', #Injury or Poisoning
-'bact', #Bacterium
-'gora', #Governmental or Regulatory Activity
 'grpa', #Group Attribute
-'anab', #Anatomical Abnormality
-'neop', #Neoplastic Process
+'amph', #Amphibian
+'mobd', #Mental or Behavioral Dysfunction
+'inpo', #Injury or Poisoning
+'lang', #Language
+'dsyn', #Disease or Syndrome
+'sosy', #Sign or Symptom
+'aggp', #Age Group
+'evnt', #Event
+'bhvr', #Behavior
 'cgab', #Congenital Abnormality
+'rept', #Reptile
+'patf', #Pathologic Function
+'chem', #Chemical
+'neop', #Neoplastic Process
+'acab' #Acquired Abnormality
 ]
 
 #MetaMap semantic types corresponding to medical tests
 test_list = [
+'edac', #Educational Activity
+'amas', #Amino Acid Sequence
 'mbrt', #Molecular Biology Research Technique
+'irda', #Indicator, Reagent, or Diagnostic Aid
+'ffas', #Fully Formed Anatomical Structure
+'enty', #Entity
+'elii', #Element, Ion, or Isotope
+'ocdi', #Occupation or Discipline
 'lbpr', #Laboratory Procedure
-'diap', #Diagnostic Procedure
+'nnon', #Nucleic Acid, Nucleoside, or Nucleotide
+'comd', #Cell or Molecular Dysfunction
+'resa', #Research Activity
+'bacs', #Biologically Active Substance
+'lbtr', #Laboratory or Test Result
+'vita', #Vitamin
+'diap' #Diagnostic Procedure
 ]
 
 #MetaMap semantic types corresponding to medical treatments
 treatment_list = [
-'clnd', #Clinical Drug
 'drdd', #Drug Delivery Device
-'edac', #Educational Activity
-'shro', #Self-help or Relief Organization
-'amas', #Amino Acid Sequence
-'antb', #Antibiotic
+'orgt', #Organization
+'bodm', #Biomedical or Dental Material
 'mcha', #Machine Activity
-'lang', #Language
-'horm', #Hormone
+'food', #Food
+'tisu', #Tissue
+'hcpp', #Human-caused Phenomenon or Process
+'topp', #Therapeutic or Preventive Procedure
+'antb', #Antibiotic
+'genf', #Genetic Function
+'medd', #Medical Device
+'bdsu' #Body Substance
 ]
 
 def stripped_filename(filename): 
