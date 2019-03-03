@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[26]:
+# In[2]:
 
 
 
@@ -21,7 +21,9 @@ the problem rows and counts of tokens per row. The error post-processed text fil
 
 """
 
-
+import os, shutil
+from os import listdir
+from os.path import isfile, join
 import pandas as pd
 from os import listdir
 from os.path import isfile
@@ -38,17 +40,6 @@ from operator import setitem
 def preprocess(ogString):
     
     newString = ogString
-    
-    #count the starting number of rows and tokens per row and returns a dataframe with this info
-    startText = ogString
-    startingCount = pd.DataFrame(columns=['row','startingTokenCount'])
-    for g, h in enumerate(startText.split("\n")):
-        d = {'row': [(g+1)], 'startingTokenCount':[len(h.split())]}
-        frame = pd.DataFrame(data=d)
-        startingCount = startingCount.append(frame)
-
-    startingCount = startingCount.reset_index(drop=True)
-    numberOfStartingRows = len(startingCount)
     
     newString = newString.lower()
     
@@ -449,45 +440,7 @@ def preprocess(ogString):
     
     newString = re.sub('\S*\w*NUM\w*\S*', 'NUM',newString)
     
-        
-        
-        
-        
-    ####################################################################################    
-        
-    #count the number of ending rows and tokens per row and returns a dataframe with this info
-    endText = newString
-    endCount = pd.DataFrame(columns=['row','endingTokenCount'])
-    for e, m in enumerate(endText.split("\n")):
-        d = {'row': [(e+1)], 'endingTokenCount':[len(m.split())]}
-        endFrame = pd.DataFrame(data=d)
-        endCount = endCount.append(endFrame)
 
-    endCount = endCount.reset_index(drop=True)
-    numberOfEndRows = len(endCount)    
-    
-    #### merge the two dataframes
-    merge = pd.merge(startingCount, endCount, how='outer', on='row')
-    
-    #### create a column that take the difference between the starting and ending token counts per row
-    merge['difference'] = merge['startingTokenCount']-merge['endingTokenCount']
-    
-    #### filter the DF so that only rows with a difference are left
-    mergeDiff = merge.loc[merge['difference'] != 0]
-    
-    #### if there is an error with the preprocessing report this, if not then report there are no issues 
-    if len(mergeDiff) > 0:
-        print('Something ain\'t right for this file: \n')
-        print('the difference in starting len to end is: ', (numberOfStartingRows-numberOfEndRows))
-        print('\ntable below breaks down the files token input and output by row count for problem rows: \n\n',mergeDiff)
-        print('\n\n')
-        print('problem output text is below \n\n')
-        for get, this in enumerate(newString.split("\n")):
-            print(get+1,this)
-        
-    else:
-        print('preprocessed file worked\n')
-    
      
     return(newString)
     
